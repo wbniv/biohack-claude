@@ -18,6 +18,12 @@ Then install any plugin individually:
 # etc.
 ```
 
+## 🛠 meta
+
+| Plugin | What it does |
+|--------|-------------|
+| [`new-installer`](plugins/new-installer/) | Scaffold a new one-shot self-removing installer command in this marketplace |
+
 ## ⚒ techops
 
 | Plugin | What it does |
