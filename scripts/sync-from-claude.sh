@@ -33,7 +33,7 @@ for arg in "$@"; do
   esac
 done
 
-RSYNC_OPTS=(-a --delete --exclude='*.pyc' --exclude='__pycache__')
+RSYNC_OPTS=(-aL --delete --exclude='*.pyc' --exclude='__pycache__')
 if [[ -n "$DRY_RUN" ]]; then
   RSYNC_OPTS+=(--dry-run)
   echo "DRY RUN — no changes will be written"
