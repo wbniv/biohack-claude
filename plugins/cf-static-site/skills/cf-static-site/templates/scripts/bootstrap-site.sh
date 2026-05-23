@@ -89,15 +89,25 @@ command -v gh   &>/dev/null || die "gh CLI not found — https://cli.github.com"
 
 if ! $DRY_RUN; then
     gh auth status &>/dev/null || die "gh not authenticated — run: gh auth login"
-    [[ -n "${CF_API_TOKEN:-}" ]] || {
-        err "CF_API_TOKEN not set."
-        err "Create a token at https://dash.cloudflare.com/profile/api-tokens with:"
-        err "  Zone     | Zone Settings | Read   (all zones)"
-        err "  Zone     | DNS           | Edit   (all zones)"
-        err "  Account  | Cloudflare Pages | Edit"
-        err "Then: export CF_API_TOKEN=<token> && bash scripts/bootstrap-site.sh"
-        exit 1
-    }
+    if [[ -z "${CF_API_TOKEN:-}" ]]; then
+        echo ""
+        echo "  Cloudflare API token needed. Create one at:"
+        echo "  https://dash.cloudflare.com/profile/api-tokens"
+        echo "  Click '+ Create Token' → 'Get started' next to 'Create Custom Token'"
+        echo "  Name: <SLUG>-operator"
+        echo "  Permissions:"
+        echo "    Zone    | Zone Settings | Read  (all zones)"
+        echo "    Zone    | DNS           | Edit  (all zones)"
+        echo "    Account | Cloudflare Pages | Edit"
+        echo "  Account Resources: Include → select your account"
+        echo ""
+        until [[ -n "${CF_API_TOKEN:-}" ]]; do
+            read -rsp "  Paste token value (input hidden): " CF_API_TOKEN; echo
+            [[ -z "${CF_API_TOKEN:-}" ]] && echo "  (token cannot be blank — try again)"
+        done
+        export CF_API_TOKEN
+        cache_set CF_API_TOKEN "$CF_API_TOKEN"
+    fi
     if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
         CF_ACCOUNT_ID=$(cf_api GET "/accounts?per_page=1" | jq -r '.result[0].id')
         [[ -n "$CF_ACCOUNT_ID" && "$CF_ACCOUNT_ID" != "null" ]] \
