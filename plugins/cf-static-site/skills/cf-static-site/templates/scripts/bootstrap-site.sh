@@ -17,7 +17,7 @@ GH_REPO="<GH_ORG>/<GH_REPO>"
 PAGES_PROJECT="<PROJECT_NAME>"
 CUSTOM_DOMAIN="<DOMAIN>"
 CI_TOKEN_NAME="<SLUG>-site-ci"
-BOOTSTRAP_CACHE="/tmp/<SLUG>-bootstrap.env"
+BOOTSTRAP_CACHE="${BASH_SOURCE[0]%/scripts/*}/.creds/bootstrap.env"
 
 DRY_RUN=false
 
@@ -74,6 +74,8 @@ for arg in "$@"; do
 done
 
 # ── preflight ────────────────────────────────────────────────────────────────
+
+mkdir -p "$(dirname "$BOOTSTRAP_CACHE")"
 
 if [[ -f "$BOOTSTRAP_CACHE" ]]; then
     # shellcheck source=/dev/null

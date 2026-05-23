@@ -239,14 +239,16 @@ lives in a subdirectory.
 ### Prerequisite
 
 `CF_API_TOKEN` must be set with `Zone:Read`, `DNS:Edit`, and `Account | Pages Write`
-permissions. Set the env var manually:
+permissions. On first run, export it and the script will cache it in `.creds/bootstrap.env`
+(gitignored) for subsequent runs:
 
 ```sh
 export CF_API_TOKEN=<token>
+bash scripts/bootstrap-site.sh
 ```
 
-If a `scripts/bootstrap.sh` cache exists at `/tmp/<SLUG>-bootstrap.env` from an
-APT repo bootstrap, the script loads it automatically.
+Subsequent runs load creds from `.creds/bootstrap.env` automatically — no need to
+re-export.
 
 The operator token **must** include `Account | Pages Write`. `bootstrap-site.sh`
 checks for this and exits 1 with instructions if the permission is missing.
