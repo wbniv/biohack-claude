@@ -38,9 +38,9 @@ Then install any plugin individually:
 
 ## 🐚 GNOME extensions
 
-| Extension | What it does |
-|-----------|-------------|
-| [`Claude Usage Indicator`](gnome/) | Shows Claude.ai weekly usage % in the GNOME top panel and dock — [wbniv/claude-usage](https://github.com/wbniv/claude-usage) |
+| Plugin | What it does |
+|--------|-------------|
+| [`install-gnome-usage`](plugins/install-gnome-usage/) | One-shot installer for the [Claude Usage Indicator](https://github.com/wbniv/claude-usage) — shows Claude.ai weekly usage % in the GNOME top panel. Self-removes after install. |
 
 ## ◆ personal (biohack-shell)
 
