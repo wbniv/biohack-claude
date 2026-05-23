@@ -90,6 +90,20 @@ command -v gh   &>/dev/null || die "gh CLI not found — https://cli.github.com"
 
 if ! $DRY_RUN; then
     gh auth status &>/dev/null || die "gh not authenticated — run: gh auth login"
+    cf_token_valid() {
+        local status
+        status=$(curl -sSo /dev/null -w "%{http_code}" \
+            "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "Authorization: Bearer ${CF_API_TOKEN:-}")
+        [[ "$status" == "200" ]]
+    }
+
+    if [[ -n "${CF_API_TOKEN:-}" ]] && ! cf_token_valid; then
+        warn "Cached token is invalid — clearing, will prompt for a new one"
+        CF_API_TOKEN=""
+        cache_set CF_API_TOKEN ""
+    fi
+
     if [[ -z "${CF_API_TOKEN:-}" ]]; then
         echo ""
         echo "  Cloudflare API token needed. Create one at:"
@@ -97,13 +111,16 @@ if ! $DRY_RUN; then
         echo "  Click '+ Create Token' → 'Get started' next to 'Create Custom Token'"
         echo "  Name: <SLUG>-operator"
         echo "  Permissions:"
+        echo "    Zone    | Zone          | Read  (all zones)"
         echo "    Zone    | DNS           | Edit  (all zones)"
+        echo "    Zone    | Page Rules    | Edit  (all zones)"
         echo "    Account | Cloudflare Pages | Edit"
         echo "  Account Resources: Include → select your account"
         echo ""
-        until [[ -n "${CF_API_TOKEN:-}" ]]; do
+        until cf_token_valid 2>/dev/null; do
             read -rsp "  Paste token value (input hidden): " CF_API_TOKEN; echo
-            [[ -z "${CF_API_TOKEN:-}" ]] && echo "  (token cannot be blank — try again)"
+            [[ -z "${CF_API_TOKEN:-}" ]] && { echo "  (token cannot be blank — try again)"; continue; }
+            cf_token_valid || echo "  (token rejected by Cloudflare — check it was copied in full)"
         done
         export CF_API_TOKEN
         cache_set CF_API_TOKEN "$CF_API_TOKEN"
