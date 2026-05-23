@@ -1,0 +1,15 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: <UPSTREAM_NAME>
+Upstream-Contact: <UPSTREAM_CONTACT>
+Source: <UPSTREAM_SOURCE_URL>
+
+Files: *
+Copyright: <UPSTREAM_COPYRIGHT_YEARS> <UPSTREAM_COPYRIGHT_HOLDERS>
+License: <LICENSE_SHORT>
+
+Files: debian/*
+Copyright: <DEBIAN_YEAR> <MAINTAINER>
+License: <LICENSE_SHORT>
+
+License: <LICENSE_SHORT>
+<LICENSE_BODY>

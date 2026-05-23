@@ -1,0 +1,192 @@
+version: '3'
+
+# Load CLOUDFLARE_API_TOKEN and friends from .env into every task's env.
+# Populated by `task secrets-pull` from SSM at /<SLUG>/cloudflare/*.
+dotenv: ['.env']
+
+silent: true
+
+tasks:
+  install:
+    desc: "Install npm dependencies (pnpm install with IPv4-first and generous timeouts)"
+    cmds:
+      - NODE_OPTIONS="--dns-result-order=ipv4first" pnpm install --fetch-timeout=120000 --fetch-retries=5
+      - pnpm approve-builds --all
+
+  dev:
+    desc: "Astro dev server at http://localhost:4321"
+    cmds:
+      - pnpm dev
+
+  build:
+    desc: "Static build into ./dist/"
+    cmds:
+      - pnpm build
+
+  preview:
+    desc: "Serve ./dist/ locally"
+    cmds:
+      - pnpm preview
+
+  deploy:
+    desc: "Build + wrangler deploy. Reads CLOUDFLARE_API_TOKEN from .env (regenerate via task secrets-pull)."
+    cmds:
+      - pnpm build
+      - pnpm wrangler deploy
+
+  site-deploy:
+    desc: "Deploy site/ to Cloudflare Pages (requires CF_PAGES_API_TOKEN + CF_PAGES_ACCOUNT_ID)"
+    cmds:
+      - wrangler pages deploy site/ --project-name <PROJECT_NAME> --branch main
+
+  secrets-pull:
+    desc: "Render local .env from SSM (/<SLUG>/cloudflare/*). Overwrites any existing .env."
+    cmds:
+      - bash scripts/secrets-pull.sh {{.CLI_ARGS}}
+
+  secrets-bootstrap:
+    desc: "One-time: push local secret values into SSM. Idempotent."
+    cmds:
+      - bash scripts/secrets-bootstrap.sh {{.CLI_ARGS}}
+
+  tf-plan:
+    desc: "Terraform plan in infrastructure/cloudflare/global/"
+    dir: infrastructure/cloudflare/global
+    env:
+      # Bridge .env's Cloudflare-named vars into Terraform's TF_VAR_* convention.
+      TF_VAR_account_id: '{{.CLOUDFLARE_ACCOUNT_ID}}'
+    cmds:
+      - terraform plan
+
+  tf-apply:
+    desc: "Terraform apply in infrastructure/cloudflare/global/"
+    dir: infrastructure/cloudflare/global
+    env:
+      TF_VAR_account_id: '{{.CLOUDFLARE_ACCOUNT_ID}}'
+    cmds:
+      - terraform apply
+
+  tf-plan-iam:
+    desc: "Terraform plan in infrastructure/cloudflare/iam-self/ (narrow-token policy)."
+    dir: infrastructure/cloudflare/iam-self
+    env:
+      TF_VAR_account_id: '{{.CLOUDFLARE_ACCOUNT_ID}}'
+    cmds:
+      - terraform plan
+
+  tf-apply-iam:
+    desc: "Terraform apply in infrastructure/cloudflare/iam-self/. Run after iam-self tf-plan diff is reviewed."
+    dir: infrastructure/cloudflare/iam-self
+    env:
+      TF_VAR_account_id: '{{.CLOUDFLARE_ACCOUNT_ID}}'
+    cmds:
+      - terraform apply
+
+  lighthouse:
+    desc: "Run Lighthouse against every routable prod page, RUNS=${RUNS:-3} runs each, devtools throttling. CI passes RUNS=1. Reports under /tmp/lh/latest/."
+    cmds:
+      - |
+        set -euo pipefail
+        mkdir -p /tmp/lh/latest
+        RUNS=${RUNS:-3}
+
+        # Routable pages. Extend this list as the site grows.
+        URLS=(
+          "https://<DOMAIN>/|home"
+        )
+        SLUGS=(); for pair in "${URLS[@]}"; do SLUGS+=( "${pair#*|}" ); done
+
+        for pair in "${URLS[@]}"; do
+          URL="${pair%|*}"; SLUG="${pair#*|}"
+          for RUN in $(seq 1 "$RUNS"); do
+            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            echo "[$TS] === ${SLUG} run ${RUN} ==="
+            npx --yes lighthouse@13.3.0 "$URL" \
+              --form-factor=mobile \
+              --throttling-method=devtools \
+              --chrome-flags="--headless=new --no-sandbox --disable-gpu" \
+              --quiet --output=json \
+              --output-path="/tmp/lh/latest/${SLUG}.run-${RUN}.report.json"
+          done
+        done
+        echo
+        echo "=== devtools / n=${RUNS} / scores per run ==="
+        printf "%-30s %-3s %-4s %-4s %-4s %-5s %-6s %-5s %s\n" "page" "run" "perf" "a11y" "bp" "fcp" "lcp" "tbt" "cls"
+        for SLUG in "${SLUGS[@]}"; do
+          for RUN in $(seq 1 "$RUNS"); do
+            jq -r --arg slug "$SLUG" --arg run "$RUN" '
+              [$slug, $run,
+               (.categories.performance.score*100|round|tostring),
+               (.categories.accessibility.score*100|round|tostring),
+               (.categories["best-practices"].score*100|round|tostring),
+               .audits["first-contentful-paint"].displayValue,
+               .audits["largest-contentful-paint"].displayValue,
+               .audits["total-blocking-time"].displayValue,
+               .audits["cumulative-layout-shift"].displayValue
+              ] | @tsv' "/tmp/lh/latest/${SLUG}.run-${RUN}.report.json"
+          done
+        done | column -t -s $'\t'
+        echo
+        if [ "$RUNS" -gt 1 ]; then
+          echo "=== Perf medians (n=${RUNS}) ==="
+        else
+          echo "=== Perf scores (n=1) ==="
+        fi
+        for SLUG in "${SLUGS[@]}"; do
+          PERF=()
+          for RUN in $(seq 1 "$RUNS"); do
+            PERF+=( "$(jq -r '(.categories.performance.score*100)|round' \
+              /tmp/lh/latest/${SLUG}.run-${RUN}.report.json)" )
+          done
+          MED=$(printf '%s\n' "${PERF[@]}" | sort -n | sed -n $(( (RUNS + 1) / 2 ))p)
+          printf "  %-30s  %d\n" "$SLUG" "$MED"
+        done
+
+  publish:
+    desc: "Tag HEAD and push to fire the Cloudflare deploy. Default: bump patch from latest v* tag. Override: task publish VERSION=v1.2.3"
+    cmds:
+      - |
+        set -euo pipefail
+
+        if ! git diff --quiet HEAD -- ':!docs/transcripts'; then
+          echo "error: working tree has uncommitted changes vs HEAD. commit or stash first." >&2
+          exit 1
+        fi
+
+        VERSION="{{.VERSION}}"
+        if [ -z "$VERSION" ]; then
+          LATEST=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [ -z "$LATEST" ]; then
+            VERSION="v0.1.0"
+          else
+            MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d v)
+            MINOR=$(echo "$LATEST" | cut -d. -f2)
+            PATCH=$(echo "$LATEST" | cut -d. -f3)
+            VERSION="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+        fi
+
+        if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+          echo "error: version '$VERSION' must match v<major>.<minor>.<patch>" >&2
+          exit 1
+        fi
+
+        if git rev-parse --verify --quiet "refs/tags/$VERSION" >/dev/null; then
+          echo "error: tag $VERSION already exists" >&2
+          exit 1
+        fi
+
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        if [ "$BRANCH" != "main" ]; then
+          echo "error: must be on main to publish (currently on '$BRANCH'). Merge your branch first." >&2
+          exit 1
+        fi
+
+        SHA=$(git rev-parse --short HEAD)
+        echo "publishing $VERSION on $BRANCH ($SHA)"
+
+        git push origin "$BRANCH"
+        git tag -a "$VERSION" -m "release $VERSION"
+        git push origin "$VERSION"
+
+        echo "tagged $VERSION; deploy workflow triggered."

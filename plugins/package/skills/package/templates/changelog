@@ -1,0 +1,7 @@
+<NAME> (<UPSTREAM>-<REVISION>) <DISTRIBUTION>; urgency=medium
+
+  * Initial Foundry packaging of <NAME> <UPSTREAM>.
+  * Source: <UPSTREAM_SOURCE_URL>
+<CHANGELOG_NOTES>
+
+ -- <MAINTAINER>  <RFC2822_DATE>

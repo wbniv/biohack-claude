@@ -1,0 +1,103 @@
+version: '3'
+
+# All build/publish/sign tasks run inside the apt-builder Docker image
+# (see Dockerfile + scripts/in-docker.sh). No host install of aptly,
+# debhelper, rclone, etc. is required.
+
+tasks:
+  default:
+    desc: "List available tasks"
+    cmds:
+      - task --list
+
+  shell:
+    desc: "Drop into a shell inside the apt-builder container"
+    cmds:
+      - bash scripts/in-docker.sh bash
+
+  build:
+    desc: "Build all .debs into dist/ (inside container)"
+    cmds:
+      - bash scripts/in-docker.sh bash scripts/build-all.sh
+
+  clean:
+    desc: "Remove dist/ and public/"
+    cmds:
+      - rm -rf dist public
+
+  publish-local:
+    desc: "Build + publish to ./public/ (unsigned smoke test; Tailwind + index.html, all inside container)"
+    deps: [build]
+    cmds:
+      - bash scripts/in-docker.sh bash scripts/init-repo.sh
+      - bash scripts/in-docker.sh bash scripts/publish-local.sh
+
+  verify:
+    desc: "dpkg-deb --info every built .deb (inside container)"
+    deps: [build]
+    cmds:
+      - |
+        bash scripts/in-docker.sh bash -c '
+          for f in dist/*.deb; do
+            echo "=== $f ==="
+            dpkg-deb --info "$f" | head -20
+          done
+        '
+
+  apt-test:
+    desc: "After publish-local, point apt at ./public/ and test resolution (runs on HOST — needs root)"
+    deps: [publish-local]
+    cmds:
+      - |
+        echo "deb [trusted=yes] file://$(pwd)/public {{SUITE}} main" \
+          | sudo tee /etc/apt/sources.list.d/{{REPO_NAME}}-test.list
+        sudo apt-get update -o Dir::Etc::sourceparts=- \
+                            -o APT::Get::List-Cleanup=0 || true
+        apt-cache policy
+        sudo rm /etc/apt/sources.list.d/{{REPO_NAME}}-test.list
+
+  shellcheck:
+    desc: "Lint all shell scripts (runs on host; shellcheck not in builder image)"
+    cmds:
+      - shellcheck scripts/*.sh scripts/recovery/*.sh
+
+  cache-cf-token:
+    desc: "[recovery] Cache a freshly-minted CF operator token + back it up to R2 (see docs/runbooks/apt-secrets-recovery.md §3)"
+    cmds:
+      - bash scripts/recovery/cache-cf-token.sh
+
+  restore-gh-secrets:
+    desc: "[recovery] Restore all GH Actions secrets from r2://{{SECRETS_BUCKET}}/ (see runbook §1)"
+    cmds:
+      - bash scripts/recovery/restore-gh-secrets.sh
+
+  restore-gpg-keyring:
+    desc: "[recovery] Import the GPG signing key from R2 backup into the local keyring (see runbook §2)"
+    cmds:
+      - bash scripts/recovery/restore-gpg-keyring.sh
+
+  rotate-r2-token:
+    desc: "[recovery] After rolling/recreating the R2 CI token in the dash, paste new AK/SK to refresh GH secrets + R2 backup (see runbook §4)"
+    cmds:
+      - bash scripts/recovery/rotate-r2-token.sh
+
+  rotate-gpg-key:
+    desc: "[recovery] Generate a new GPG signing key, upload pubkey to R2, update GH secret + R2 backup, patch gen/config.py (see runbook §5)"
+    cmds:
+      - bash scripts/recovery/rotate-gpg-key.sh
+
+  bump:
+    desc: "Auto-increment patch version and push {{TAG_PREFIX}}vX.Y.Z tag to trigger publish workflow"
+    cmds:
+      - |
+        set -eo pipefail
+        last=$(git tag -l '{{TAG_PREFIX}}v*' --sort=-v:refname | head -1)
+        if [[ -z "$last" ]]; then
+          next="{{TAG_PREFIX}}v0.1.0"
+        else
+          IFS='.' read -r maj min pat <<< "${last#{{TAG_PREFIX}}v}"
+          next="{{TAG_PREFIX}}v${maj}.${min}.$((pat+1))"
+        fi
+        echo "Tagging $next"
+        git tag -a "$next" -m "apt repo release $next"
+        git push origin "$next"

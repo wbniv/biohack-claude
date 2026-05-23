@@ -1,0 +1,170 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "WebSearch",
+      "WebFetch(domain:docs.serverpod.dev)",
+      "WebFetch(domain:pub.dev)",
+      "WebFetch(domain:caddyserver.com)",
+      "WebFetch(domain:caddy.community)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.adamsdesk.com)",
+      "WebFetch(domain:storage.googleapis.com)",
+      "WebFetch(domain:archive.apache.org)",
+      "WebFetch(domain:taskfile.dev)",
+      "WebFetch(domain:api.github.com)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/will/.claude/hooks/tab-session-start.sh",
+            "timeout": 2000
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh session-clear-md-flags.sh",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/will/.claude/hooks/tab-orange.sh",
+            "timeout": 2000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh todo-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/will/.claude/hooks/tab-reset.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh transcript-logger.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh commit-checklist.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh tf-blocker.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh sleep-blocker.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh git-add-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh plan-first.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh plan-migrate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh md-preview.sh",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh py-syntax.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hook-runner.sh shell-strict.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/will/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false
+  },
+  "effortLevel": "xhigh",
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": false,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Allow `pnpm install`, `pnpm tools-dev`, and `pnpm exec tools-dev` (any args) when cwd is `/home/will/SRC/open-design` or a subdirectory. User has explicitly authorized installing and running this open-source design tool (nexu-io/open-design, Apache-2.0).",
+      "Allow `git push origin main` and `git push` (no args) — direct pushes to the project default branch are the existing workflow; auto-mode safety here is over-restrictive."
+    ]
+  }
+}

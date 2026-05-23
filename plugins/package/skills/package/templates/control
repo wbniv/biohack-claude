@@ -1,0 +1,14 @@
+Source: <NAME>
+Section: <SECTION>
+Priority: optional
+Maintainer: <MAINTAINER>
+Build-Depends: debhelper-compat (= 13)<BUILD_DEPS_TAIL>
+Standards-Version: 4.7.0
+Homepage: <HOMEPAGE>
+Rules-Requires-Root: no
+
+Package: <NAME>
+Architecture: <ARCHITECTURE>
+Depends: ${shlibs:Depends}, ${misc:Depends}<DEPENDS_EXTRA>
+Description: <DESCRIPTION_SHORT>
+<DESCRIPTION_LONG>

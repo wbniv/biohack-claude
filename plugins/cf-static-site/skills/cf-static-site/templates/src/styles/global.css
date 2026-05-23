@@ -1,0 +1,59 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Site brand tokens. Replace <PRIMARY_HIGHLIGHT_COLOR> with your brand's
+ * accent hex (e.g. #f80000 for World Foundry, #b026ff for indri.studio).
+ * --font-display resolves at runtime to the full stack Astro registers
+ * via the Fonts API (brand font + metric-matched fallback face). */
+@theme {
+	--color-surface: #1a1714;
+	--color-surface-raised: #241f1b;
+	--color-on-surface: #f2ede6;
+	--color-on-surface-muted: #b8aea3;
+	--color-accent: <PRIMARY_HIGHLIGHT_COLOR>;
+	--color-header-bg: <PRIMARY_HIGHLIGHT_COLOR>;
+	--color-border: #3a322c;
+
+	--font-display: var(--font-space-grotesk), system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-body: var(--font-space-grotesk), system-ui, -apple-system, "Segoe UI", sans-serif;
+
+	--container-max: 960px;
+}
+
+/* Register as a typed number so the value itself interpolates.
+ * Transitioned on `html`; every CSS calc() that reads it animates. */
+@property --header-shrink {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+		background-color: var(--color-surface);
+		transition: --header-shrink 220ms ease-in-out;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		html { transition: none; }
+	}
+
+	body {
+		font-family: var(--font-body);
+		color: var(--color-on-surface);
+		background-color: var(--color-surface);
+	}
+
+	::selection {
+		background-color: var(--color-accent);
+		color: var(--color-surface);
+	}
+}
+
+/* Sticky header shrink. py ramps from 1.125rem → 0.125rem as
+ * --header-shrink goes 0 → 1. Adjust values per brand. */
+.header-fx {
+	padding-top: calc(1.125rem - 1rem * var(--header-shrink, 0));
+	padding-bottom: calc(1.125rem - 1rem * var(--header-shrink, 0));
+}

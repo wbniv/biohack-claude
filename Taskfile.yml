@@ -1,0 +1,42 @@
+version: "3"
+
+tasks:
+  sync:
+    desc: Sync memories + settings from ~/.claude/ into this repo
+    cmds:
+      - bash scripts/sync-from-claude.sh
+
+  sync-dry:
+    desc: Preview what sync would change (no writes)
+    cmds:
+      - bash scripts/sync-from-claude.sh --dry-run
+
+  gen-marketplace:
+    desc: Regenerate .claude-plugin/marketplace.json from plugins/*
+    cmds:
+      - bash scripts/gen-marketplace.sh
+
+  publish-site:
+    desc: Generate biohack.net/claude/index.html and open for review
+    cmds:
+      - bash scripts/gen-biohack-skills-page.sh
+      - task md -- {{.BIOHACK_NET_DIR | default (printf "%s/SRC/biohack-net" .HOME)}}/claude/index.html
+    vars:
+      HOME:
+        sh: echo $HOME
+
+  install-local:
+    desc: Install this marketplace locally for dogfooding
+    cmds:
+      - claude plugin marketplace add {{.ROOT_DIR}}
+    vars:
+      ROOT_DIR:
+        sh: pwd
+
+  md:
+    desc: Render a markdown file to HTML and open in browser
+    cmds:
+      - bash {{.HOME}}/SRC/python-tui-lib/scripts/md-to-pdf.sh {{.CLI_ARGS}}
+    vars:
+      HOME:
+        sh: echo $HOME

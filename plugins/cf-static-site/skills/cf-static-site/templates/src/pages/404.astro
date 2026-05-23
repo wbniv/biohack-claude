@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Not found">
+	<section
+		class="flex-1 w-full max-w-[var(--container-max)] mx-auto px-6 py-24 flex flex-col items-center text-center gap-6"
+	>
+		<p class="font-display text-6xl font-bold text-[var(--color-accent)]">404</p>
+		<h1 class="font-display text-2xl font-bold">Page not found</h1>
+		<p class="text-[var(--color-on-surface-muted)]">
+			The page you're looking for doesn't exist.
+		</p>
+		<a
+			href="/"
+			class="font-display uppercase tracking-[0.2em] text-xs border border-[var(--color-accent)] text-[var(--color-accent)] px-5 py-3 hover:bg-[var(--color-accent)] hover:text-[var(--color-surface)] transition-colors"
+		>
+			Back home
+		</a>
+	</section>
+</Base>

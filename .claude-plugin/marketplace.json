@@ -1,0 +1,92 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "biohack-claude",
+  "description": "Will Norris's personal Claude Code marketplace \u2014 techops, design, and personal productivity plugins.",
+  "owner": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  },
+  "plugins": [
+    {
+      "name": "cf-static-site",
+      "description": "Set up a new static site on Cloudflare \u2014 Workers + Terraform + GH Actions, or plain Pages. Two paths: full Astro stack or plain HTML.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/cf-static-site"
+    },
+    {
+      "name": "new-web-apt-repo",
+      "description": "Provision a web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/new-web-apt-repo"
+    },
+    {
+      "name": "claude-housekeeping",
+      "description": "Audit Claude Code artifacts for drift \u2014 skills, hooks, memories, settings, and plans \u2014 across global ~/.claude and every project.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/claude-housekeeping"
+    },
+    {
+      "name": "package",
+      "description": "Package a program as a Debian-policy-compliant .deb for a foundry-style apt repo. Handles binaries, scripts, and source packages.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/package"
+    },
+    {
+      "name": "import-claude-design",
+      "description": "Import a Claude Design export zip into site/ and deploy via tag-triggered CI.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "design",
+      "source": "./plugins/import-claude-design"
+    },
+    {
+      "name": "iam-bootstrap",
+      "description": "Set up AWS IAM credentials for a new project \u2014 Terraform user, state backend, and self-narrowing permissions.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/iam-bootstrap"
+    },
+    {
+      "name": "cf-domain-setup",
+      "description": "Add a domain to Cloudflare on the free plan \u2014 scoped API token, zone creation, and activation polling via curl.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/cf-domain-setup"
+    },
+    {
+      "name": "aws-billing-tags",
+      "description": "Set up AWS cost tracking, billing tags, budget alerts, and Cost Explorer for a project.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/aws-billing-tags"
+    },
+    {
+      "name": "biohack-shell",
+      "description": "Tab colour hooks (session-start / stop / prompt-submit) and productivity slash commands from Will's personal Claude Code setup.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "personal",
+      "source": "./plugins/biohack-shell"
+    }
+  ]
+}

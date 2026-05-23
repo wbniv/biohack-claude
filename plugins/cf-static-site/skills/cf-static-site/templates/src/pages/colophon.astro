@@ -1,0 +1,106 @@
+---
+import Base from "../layouts/Base.astro";
+
+// Set to your public GitHub repo URL if the source is public, otherwise leave as null.
+const sourceRepo: string | null = null; // e.g. "https://github.com/<GH_USER>/<DOMAIN>"
+
+const linkClass =
+	"text-[var(--color-on-surface)] underline decoration-dotted decoration-[var(--color-accent)] underline-offset-4 hover:text-[var(--color-accent)] transition-colors";
+
+const stack = [
+	{
+		label: "Generator",
+		body: "Astro 6",
+		href: "https://astro.build",
+		detail: " — static site generator, compiles to plain HTML/CSS/JS with no client-side runtime.",
+	},
+	{
+		label: "Styling",
+		body: "Tailwind CSS v4",
+		href: "https://tailwindcss.com",
+		detail: " — CSS-first configuration via @theme blocks.",
+	},
+	{
+		label: "Hosting",
+		body: "Cloudflare Workers + Static Assets",
+		href: "https://developers.cloudflare.com/workers/static-assets/",
+		detail: ".",
+	},
+	{
+		label: "Infrastructure",
+		body: "Terraform",
+		href: "https://www.terraform.io",
+		detail: " — zone, custom-domain bindings, API tokens.",
+	},
+	{
+		label: "Secrets",
+		body: "AWS SSM Parameter Store",
+		href: "https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html",
+		detail: ".",
+	},
+	{
+		label: "CI/CD",
+		body: "GitHub Actions",
+		href: "https://github.com/features/actions",
+		detail: " — tag-driven deploys.",
+	},
+	{
+		label: "Package manager",
+		body: "pnpm",
+		href: "https://pnpm.io",
+		detail: ".",
+	},
+];
+---
+
+<Base title="Colophon — <DOMAIN>">
+	<section
+		class="flex-1 w-full max-w-[var(--container-max)] mx-auto px-6 py-20 md:py-28 flex flex-col gap-12"
+	>
+		<div>
+			<h1 class="font-display text-4xl md:text-5xl font-bold tracking-tight mb-2">
+				Colophon
+			</h1>
+			<p class="text-[var(--color-on-surface-muted)]">How this site is built.</p>
+		</div>
+
+		<section>
+			<h2 class="font-display text-xs uppercase tracking-[0.2em] text-[var(--color-on-surface-muted)] mb-6">
+				Stack
+			</h2>
+			<ul class="flex flex-col gap-4">
+				{stack.map(({ label, body, href, detail }) => (
+					<li class="flex gap-4">
+						<span class="font-body font-semibold text-[var(--color-accent)] w-36 shrink-0">{label}</span>
+						<span class="text-[var(--color-on-surface-muted)]">
+							<a href={href} class={linkClass}>{body}</a>{detail}
+						</span>
+					</li>
+				))}
+			</ul>
+		</section>
+
+		<section>
+			<h2 class="font-display text-xs uppercase tracking-[0.2em] text-[var(--color-on-surface-muted)] mb-6">
+				Typography
+			</h2>
+			<p class="text-[var(--color-on-surface-muted)] max-w-2xl">
+				<a href="https://fonts.google.com/specimen/Space+Grotesk" class={linkClass}>Space Grotesk</a>
+				— display and body, self-hosted via the
+				<a href="https://docs.astro.build/en/reference/configuration-reference/#experimental-fonts" class={linkClass}>Astro Fonts API</a>.
+			</p>
+		</section>
+
+		{sourceRepo && (
+			<section>
+				<h2 class="font-display text-xs uppercase tracking-[0.2em] text-[var(--color-on-surface-muted)] mb-6">
+					Source
+				</h2>
+				<p class="text-[var(--color-on-surface-muted)]">
+					Source code available on
+					<a href={sourceRepo} class={linkClass}>GitHub</a>.
+				</p>
+			</section>
+		)}
+	</section>
+</Base>

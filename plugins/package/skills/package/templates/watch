@@ -1,0 +1,22 @@
+# Control file for uscan. Used to detect new upstream versions:
+#   uscan --report-status   # tells you whether upstream has a newer release
+#   uscan                   # downloads it (sandbox: ../uscan-tmp/)
+#
+# See uscan(1). Common patterns:
+#
+#   GitHub releases (.tar.gz archive of a tag):
+#     version=4
+#     opts=filenamemangle=s/.+\/v?(\d\S+)\.tar\.gz/<NAME>-$1\.tar\.gz/ \
+#       https://github.com/<OWNER>/<REPO>/tags \
+#       (?:.*?/)?v?(\d\S+)\.tar\.gz
+#
+#   Sourceforge project / file releases:
+#     version=4
+#     https://sf.net/projects/<PROJ>/files/<NAME>-(.+)\.tar\.gz/download
+#
+#   Plain HTTP index with versioned tarballs:
+#     version=4
+#     https://example.org/downloads/ <NAME>-([\d.]+)\.tar\.gz
+#
+version=4
+<WATCH_URL_PATTERN>

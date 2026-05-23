@@ -1,0 +1,8 @@
+{
+  "name": "claude-housekeeping",
+  "description": "Audit Claude Code artifacts for drift \u2014 skills, hooks, memories, settings, and plans \u2014 across global ~/.claude and every project.",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

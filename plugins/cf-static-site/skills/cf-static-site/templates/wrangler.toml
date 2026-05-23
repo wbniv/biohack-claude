@@ -1,0 +1,29 @@
+# Cloudflare Workers + Static Assets config for <DOMAIN>.
+#
+# The [[routes]] block is deliberately omitted — Terraform owns the
+# custom-domain bindings (cloudflare_workers_custom_domain for
+# <DOMAIN> and www.<DOMAIN>) in
+# infrastructure/cloudflare/global/workers.tf. Keeping route config in TF
+# means `wrangler deploy` never fights TF for ownership of the domain.
+#
+# `main` points at a small Worker that 301-redirects www.<DOMAIN>
+# → <DOMAIN>. Both hostnames are bound to this Worker via TF; the
+# handler picks the www case off and falls through to env.ASSETS.fetch for
+# everything else. `run_worker_first = true` ensures the handler is invoked
+# before the static-assets lookup, so /index.html under the www host still
+# redirects.
+
+name = "<SLUG>"
+compatibility_date = "2024-11-01"
+main = "worker/index.ts"
+
+[assets]
+binding = "ASSETS"
+directory = "./dist"
+# 404-page returns our /404.html (Astro generates one from
+# src/pages/404.astro); "single-page-application" would fall back to
+# index.html instead, which isn't what we want for a multi-page site.
+not_found_handling = "404-page"
+# Worker fetch handler runs before the assets lookup so the www→apex
+# redirect can intercept asset paths.
+run_worker_first = true

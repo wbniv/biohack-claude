@@ -1,0 +1,176 @@
+name: Deploy
+
+# Tag-driven deploys: push a `v*` tag (e.g. v1.0.0) to ship.
+# `workflow_dispatch` lets you re-run a deploy manually from the Actions
+# tab without creating a new tag — useful for rollback (pick an old tag's
+# commit from the UI) or re-deploying the current tag after a secret rotation.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [<SLUG>-status-updated]
+
+permissions:
+  contents: write   # write so the per-tag archive step can commit-back to main
+
+# Queue deploys so two near-simultaneous tag pushes don't race each other
+# into the Workers API. We don't cancel in-progress deploys — letting one
+# finish cleanly is safer than killing it mid-upload.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Check links
+        run: node scripts/check-links.js --dir dist
+
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+      # Lighthouse audit against prod after deploy. Informational — keeps
+      # `continue-on-error: true` so a Lighthouse failure never blocks a
+      # ship. RUNS=1 (instead of the local default 3) because devtools
+      # throttling has near-zero run-to-run variance — a single run is
+      # statistically equivalent to a 3-run median and saves Actions budget.
+      - uses: arduino/setup-task@v2
+        with:
+          version: '3.x'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for Cloudflare propagation
+        run: sleep 30
+
+      - name: Lighthouse audit
+        id: lh
+        continue-on-error: true
+        env:
+          RUNS: '1'
+        run: task lighthouse
+
+      # Stage to a workspace-relative path so the resulting artifact zip
+      # has flat filenames.
+      - name: Stage Lighthouse artifacts
+        if: steps.lh.outcome == 'success'
+        run: |
+          mkdir -p lighthouse-bundle
+          cp /tmp/lh/latest/*.json lighthouse-bundle/
+
+      - name: Upload Lighthouse bundle
+        if: steps.lh.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-${{ github.ref_name }}
+          path: lighthouse-bundle/*.json
+          retention-days: 90
+
+      - name: Lighthouse summary
+        if: steps.lh.outcome == 'success'
+        run: |
+          {
+            echo "## Lighthouse — ${{ github.ref_name }}"
+            echo
+            echo "| Page | Perf | FCP | LCP | TBT | CLS |"
+            echo "|---|---:|---:|---:|---:|---:|"
+            for f in lighthouse-bundle/*.run-1.report.json; do
+              slug=$(basename "$f" .run-1.report.json)
+              jq -r --arg slug "$slug" '
+                "| \($slug) | \((.categories.performance.score*100)|round) | \(.audits["first-contentful-paint"].displayValue) | \(.audits["largest-contentful-paint"].displayValue) | \(.audits["total-blocking-time"].displayValue) | \(.audits["cumulative-layout-shift"].displayValue) |"
+              ' "$f"
+            done
+          } >> $GITHUB_STEP_SUMMARY
+
+      # CLS regression alert. Asserts the budget on each deploy: any page
+      # over 0.05 fails the step (red badge in Actions UI) and emits a
+      # ::warning:: annotation. The deploy already shipped before
+      # Lighthouse runs, so this is a post-deploy alert, not a gate.
+      - name: CLS budget check
+        if: steps.lh.outcome == 'success'
+        continue-on-error: true
+        env:
+          CLS_BUDGET: '0.05'
+        run: |
+          set -euo pipefail
+          violations=0
+          {
+            echo
+            echo "### CLS budget: ≤ ${CLS_BUDGET}"
+            echo
+            echo "| Page | CLS | Status |"
+            echo "|---|---:|:---:|"
+            for f in /tmp/lh/latest/*.run-1.report.json; do
+              SLUG=$(basename "$f" .run-1.report.json)
+              CLS=$(jq -r '.audits["cumulative-layout-shift"].numericValue' "$f")
+              STATUS=$(awk -v c="$CLS" -v b="$CLS_BUDGET" \
+                'BEGIN { print (c+0 <= b+0) ? "✓ OK" : "⚠️ OVER" }')
+              printf "| %s | %.4f | %s |\n" "$SLUG" "$CLS" "$STATUS"
+              if [ "${STATUS#⚠️}" != "$STATUS" ]; then
+                violations=$((violations + 1))
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$violations" -gt 0 ]; then
+            echo "::warning::$violations page(s) over CLS budget ${CLS_BUDGET}; see job summary."
+            exit 1
+          fi
+
+      # Threshold gate. Fails the workflow (no continue-on-error) if any
+      # sampled page drops below Perf / A11y / BP / SEO ≥ 95. The deploy
+      # already ran before Lighthouse, so a red check doesn't block the
+      # ship — it surfaces the regression as a failed workflow.
+      - name: Threshold check
+        if: steps.lh.outcome == 'success'
+        run: ./scripts/lighthouse-threshold.sh
+
+      # Per-tag durable archive. Copies the run-1 JSONs to public/lh/<tag>/,
+      # commits back to main with [skip ci]. Astro's next build auto-copies
+      # public/ → dist/, so the bundle serves at
+      # https://<DOMAIN>/lh/<tag>/<slug>.run-1.report.json on the
+      # next deploy. NOT gated on threshold success — archiving a *failed*
+      # audit is especially valuable as evidence of what regressed.
+      # workflow_dispatch runs (no tag) skip this step.
+      - name: Archive Lighthouse bundle to main
+        if: |
+          steps.lh.outcome == 'success' &&
+          startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG=${{ github.ref_name }}
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # Switch from the detached-HEAD tag checkout to a fresh main.
+          # JSONs live at /tmp/lh/latest/ — outside the workspace, so
+          # they survive the branch switch.
+          git fetch origin main
+          git checkout -B main origin/main
+
+          mkdir -p "public/lh/$TAG"
+          cp /tmp/lh/latest/*.run-1.report.json "public/lh/$TAG/"
+
+          git add "public/lh/$TAG/"
+          git commit -m "CI: archive Lighthouse bundle for $TAG [skip ci]"
+          git push origin main

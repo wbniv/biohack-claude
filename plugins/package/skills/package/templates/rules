@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+# Output of `dh -h` lists every helper `dh $@` invokes. Overrides go above
+# the `%: dh $@` catch-all. Keep this file minimal — debhelper's defaults
+# handle install path normalization, strip, compress, shlibdeps, fixperms,
+# md5sums, and reproducible-build settings.
+
+# Uncomment to forward dpkg-buildflags to the upstream Makefile (most
+# Makefiles already pick up CFLAGS/CPPFLAGS/LDFLAGS from the environment;
+# include only if upstream's Makefile resets them).
+# include /usr/share/dpkg/buildflags.mk
+
+# Example override: build out-of-tree
+# override_dh_auto_build:
+# 	dh_auto_build -- -C src
+
+# Example override: skip flaky upstream tests
+# override_dh_auto_test:
+# 	dh_auto_test --no-parallel
+# 	# or, to skip entirely: (empty body)
+
+# Example override: install path massaging
+# override_dh_auto_install:
+# 	dh_auto_install -- prefix=/usr
+
+%:
+	dh $@

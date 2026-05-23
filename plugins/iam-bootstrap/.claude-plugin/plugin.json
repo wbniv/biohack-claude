@@ -1,0 +1,8 @@
+{
+  "name": "iam-bootstrap",
+  "description": "Set up AWS IAM credentials for a new project \u2014 Terraform user, state backend, and self-narrowing permissions.",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

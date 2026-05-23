@@ -1,0 +1,8 @@
+# Files excluded from sync-from-claude.sh memory sync.
+# One pattern per line (rsync --exclude format).
+# Use for memories that contain project-specific secrets, client context,
+# or anything you don't want published.
+#
+# Examples:
+#   project_client_secrets.md
+#   feedback_*internal*.md

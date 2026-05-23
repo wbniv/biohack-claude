@@ -1,0 +1,8 @@
+{
+  "name": "cf-static-site",
+  "description": "Set up a new static site on Cloudflare \u2014 Workers + Terraform + GH Actions, or plain Pages. Two paths: full Astro stack or plain HTML.",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

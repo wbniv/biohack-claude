@@ -1,0 +1,8 @@
+{
+  "name": "cf-domain-setup",
+  "description": "Add a domain to Cloudflare on the free plan \u2014 scoped API token, zone creation, and activation polling via curl.",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

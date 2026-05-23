@@ -1,0 +1,8 @@
+{
+  "name": "new-web-apt-repo",
+  "description": "Provision a web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

@@ -1,0 +1,159 @@
+name: Build, sign, and publish APT repo
+
+# Build/sign/publish runs entirely inside the apt-builder Docker image
+# (apt/Dockerfile). The GitHub-hosted runner only needs docker + gh.
+
+on:
+  push:
+    tags:
+      - '{{TAG_PREFIX}}v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build + sign only; do not upload to R2'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build apt-builder image (cached)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./{{APT_SUBDIR}}
+          file: ./{{APT_SUBDIR}}/Dockerfile
+          tags: apt-builder:local
+          load: true
+          cache-from: type=gha,scope=apt-builder
+          cache-to:   type=gha,scope=apt-builder,mode=max
+
+      - name: Build all .debs (in container)
+        run: bash {{APT_SUBDIR}}/scripts/in-docker.sh bash scripts/build-all.sh
+
+      - name: Initialise aptly repo (in container)
+        run: bash {{APT_SUBDIR}}/scripts/in-docker.sh bash scripts/init-repo.sh
+
+      - name: Publish to ./public/ (in container, unsigned smoke step)
+        env:
+          GPG_KEY: ''
+        run: bash {{APT_SUBDIR}}/scripts/in-docker.sh bash scripts/publish-local.sh
+
+      - name: Sign Release (in container)
+        if: ${{ !inputs.dry_run }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          PUBLISH_DIR: ./public/dists/{{SUITE}}
+        run: bash {{APT_SUBDIR}}/scripts/in-docker.sh bash scripts/sign.sh
+
+      - name: Export public key into repo root (in container)
+        if: ${{ !inputs.dry_run }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          bash {{APT_SUBDIR}}/scripts/in-docker.sh bash -c '
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            gpg --export --armor > ./public/key.gpg
+          '
+
+      - name: Sync to Cloudflare R2 (in container, via rclone)
+        if: ${{ !inputs.dry_run }}
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT:          ${{ secrets.R2_ENDPOINT }}
+          RCLONE_CONFIG_R2_REGION: auto
+        run: |
+          bash {{APT_SUBDIR}}/scripts/in-docker.sh bash -c '
+            # Pass 1: sync everything except Release files.
+            rclone sync ./public/ R2:{{R2_BUCKET}}/ \
+              --progress --transfers=8 --checksum --s3-no-check-bucket \
+              --exclude "Release" --exclude "Release.gpg" --exclude "InRelease" \
+              --header-upload "Cache-Control:no-store"
+
+            # Pass 2: upload Release files last (single-threaded, no race).
+            rclone copy ./public/dists/ R2:{{R2_BUCKET}}/dists/ \
+              --progress --transfers=1 --checksum --s3-no-check-bucket \
+              --include "**/Release" --include "**/Release.gpg" --include "**/InRelease" \
+              --header-upload "Cache-Control:no-store"
+          '
+
+      - name: Verify repo consistency
+        if: ${{ !inputs.dry_run }}
+        run: |
+          for i in $(seq 1 10); do
+            EXPECTED=$(curl -fsSL https://{{CUSTOM_DOMAIN}}/dists/{{SUITE}}/Release \
+              | awk '/^SHA256:/{found=1} found && /main\/binary-amd64\/Packages\.gz/{print $1; exit}')
+            ACTUAL=$(curl -fsSL https://{{CUSTOM_DOMAIN}}/dists/{{SUITE}}/main/binary-amd64/Packages.gz \
+              | sha256sum | awk '{print $1}')
+            if [[ "$EXPECTED" == "$ACTUAL" ]]; then
+              echo "Repo consistent (attempt ${i})"
+              exit 0
+            fi
+            echo "Attempt ${i}/10: expected ${EXPECTED}, got ${ACTUAL} — retrying in 2s"
+            sleep 2
+          done
+          echo "Repo never became consistent after 10 attempts" >&2
+          exit 1
+
+      - name: Upload artifacts (always, for audit)
+        uses: actions/upload-artifact@v7
+        with:
+          name: apt-repo-${{ github.ref_name }}
+          path: {{APT_SUBDIR}}/public/
+          retention-days: 30
+
+  smoke-install:
+    name: Smoke-check APT repo from a clean Ubuntu container
+    needs: build-and-publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:latest
+    steps:
+      - name: Install packages from the just-published repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update -q
+          apt-get install -y --no-install-recommends curl gnupg ca-certificates
+          install -d /etc/apt/keyrings
+          curl -fsSL https://{{CUSTOM_DOMAIN}}/key.gpg \
+            | gpg --dearmor -o /etc/apt/keyrings/{{REPO_NAME}}.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/{{REPO_NAME}}.gpg] https://{{CUSTOM_DOMAIN}} {{SUITE}} main" \
+            > /etc/apt/sources.list.d/{{REPO_NAME}}.list
+          apt-get update -q
+
+          # Discover packages straight from our published Packages files (no
+          # cross-referencing against Ubuntu's catalogue). Empty on a fresh
+          # empty repo — index serving is verified, install test is skipped.
+          PKGS=$(grep -hE '^Package: ' /var/lib/apt/lists/{{CUSTOM_DOMAIN}}_*_Packages 2>/dev/null \
+                 | awk '{print $2}' | sort -u || true)
+
+          if [[ -z "$PKGS" ]]; then
+            echo "Repo has no packages yet — index served + signed (good); install test skipped."
+            exit 0
+          fi
+          echo "Packages in repo:"
+          echo "$PKGS"
+
+          # apt-cache show, NOT apt-get install. The latter requires every
+          # transitive Depends: to be installable in a bare ubuntu:latest,
+          # which fails for packages with heavy deps (GUI, kernel modules,
+          # gnome-shell, etc.). apt-cache show verifies metadata + signing
+          # chain without trying to install — the relevant smoke check.
+          while IFS= read -r pkg; do
+            echo "::group::apt-cache show $pkg"
+            apt-cache show "$pkg"
+            echo "::endgroup::"
+          done <<< "$PKGS"
