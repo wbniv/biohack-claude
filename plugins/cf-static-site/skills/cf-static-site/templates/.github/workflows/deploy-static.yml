@@ -10,6 +10,10 @@ concurrency:
   group: site-deploy
   cancel-in-progress: false
 
+env:
+  # Set to '.' to deploy from repo root instead of site/
+  DEPLOY_DIR: site/
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -27,4 +31,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_PAGES_API_TOKEN }}
           accountId: ${{ secrets.CF_PAGES_ACCOUNT_ID }}
-          command: pages deploy site/ --project-name <PROJECT_NAME> --branch main
+          command: pages deploy ${{ env.DEPLOY_DIR }} --project-name <PROJECT_NAME> --branch <BRANCH>

@@ -1,7 +1,7 @@
 ---
 name: cf-static-site
 description: Use this skill when setting up a new static site on Cloudflare. Two paths — (1) full stack: Astro + Cloudflare Workers + Terraform + GitHub Actions tag-driven deploys + SSM secrets; (2) plain static HTML + Cloudflare Pages + no-Terraform bootstrap script. Trigger phrases: "set up a new site", "bootstrap cloudflare site", "new cloudflare workers site", "reproduce the worldfoundry backend", "spin up a new domain".
-version: 2.3.0
+version: 2.4.0
 ---
 
 # Cloudflare Static Site Bootstrap
@@ -218,7 +218,7 @@ Watch the deploy: https://github.com/<GH_USER>/<DOMAIN>/actions
 
 ## Pages path (plain static HTML)
 
-Use this path for placeholder or early-stage sites before the design is decided. No Terraform, no AWS, no framework.
+Use this path for placeholder or early-stage sites, OR to migrate an existing static repo to Cloudflare Pages. No Terraform, no AWS, no framework.
 
 ### Inputs
 
@@ -226,15 +226,30 @@ Use this path for placeholder or early-stage sites before the design is decided.
 1. Domain         — apex domain, e.g. foundrylinux.org
 2. Slug           — short kebab-case prefix, e.g. foundrylinux
 3. GH org/repo    — e.g. foundry-linux/foundrylinux.org
+4. Deploy dir     — path to serve (default: site/; use . for root-deployed repos)
+5. Branch         — production branch (default: main; use master for older repos)
 ```
 
 Derive: `<PROJECT_NAME>` = domain with `.` → `-`, e.g. `foundrylinux-org`.
 
+**Existing repo variant:** If the repo already has content (not a fresh bootstrap),
+skip Step 2 (placeholder page) and set deploy dir to `.` (root) unless content
+lives in a subdirectory.
+
 ### Prerequisite
 
-`scripts/bootstrap.sh` (Phase 1 APT repo bootstrap) must have run once so `CF_ACCOUNT_ID` and `CF_API_TOKEN` are cached in `/tmp/<SLUG>-bootstrap.env`. If bootstrapping a site without a Phase 1 APT repo, set those env vars manually before running `bootstrap-site.sh`.
+`CF_API_TOKEN` must be set with `Zone:Read`, `DNS:Edit`, and `Account | Pages Write`
+permissions. Set the env var manually:
 
-The operator token **must** include `Account | Pages Write`. The `bootstrap.sh` token creation prompt now lists this permission; if the token predates that change, edit it at `https://dash.cloudflare.com/profile/api-tokens` to add it. `bootstrap-site.sh` checks for this and exits 1 with instructions if the permission is missing.
+```sh
+export CF_API_TOKEN=<token>
+```
+
+If a `scripts/bootstrap.sh` cache exists at `/tmp/<SLUG>-bootstrap.env` from an
+APT repo bootstrap, the script loads it automatically.
+
+The operator token **must** include `Account | Pages Write`. `bootstrap-site.sh`
+checks for this and exits 1 with instructions if the permission is missing.
 
 ### Step 1 — Bootstrap (`templates/scripts/bootstrap-site.sh`)
 
@@ -246,26 +261,35 @@ bash scripts/bootstrap-site.sh [--dry-run]
 ```
 
 This:
+0. Removes any Cloudflare Page Rules that redirect `<DOMAIN>` to `www.<DOMAIN>`
+   (stale rules from previous hosting prevent Pages from taking over the apex)
 1. Creates the Cloudflare Pages project (`<PROJECT_NAME>`)
-2. Attaches `<DOMAIN>` as a custom domain (Cloudflare auto-creates the DNS record)
-3. Creates a `Cloudflare Pages:Edit`-scoped CI token (`<SLUG>-site-ci`); falls back to manual prompt if permission lookup fails
-4. Wires `CF_PAGES_API_TOKEN` and `CF_PAGES_ACCOUNT_ID` into GitHub Actions secrets
+2. Removes old A records pointing at previous hosts; creates proxied CNAME apex → Pages
+3. Attaches `<DOMAIN>` as a custom domain
+4. Creates a `Cloudflare Pages:Edit`-scoped CI token (`<SLUG>-site-ci`); falls back to manual prompt if permission lookup fails
+5. Wires `CF_PAGES_API_TOKEN` and `CF_PAGES_ACCOUNT_ID` into GitHub Actions secrets
 
 ### Step 2 — Placeholder page (`templates/site/index.html`)
+
+**Skip this step for existing repos.** For new/empty repos only:
 
 Read `templates/site/index.html`, substitute `<DOMAIN>`, write to `site/index.html`.
 
 ### Step 3 — Deploy workflow (`templates/.github/workflows/deploy-static.yml`)
 
-Read `templates/.github/workflows/deploy-static.yml`, substitute `<PROJECT_NAME>`, write to `.github/workflows/site-deploy.yml` (or `deploy.yml` if no other deploy exists).
+Read `templates/.github/workflows/deploy-static.yml`, substitute `<PROJECT_NAME>`
+and `<BRANCH>`, write to `.github/workflows/site-deploy.yml` (or `deploy.yml` if
+no other deploy exists).
+
+Set `DEPLOY_DIR` in the workflow env if not using `site/` (e.g. `.` for root).
 
 ### Step 4 — First deploy
 
 Tag and push:
 ```sh
-git add site/ .github/workflows/site-deploy.yml scripts/bootstrap-site.sh
-git commit -m "feat: placeholder site for <DOMAIN>"
-git tag v0.1.0 && git push origin main v0.1.0
+git add ${DEPLOY_DIR} .github/workflows/ scripts/bootstrap-site.sh
+git commit -m "feat: Cloudflare Pages hosting for <DOMAIN>"
+git tag v0.1.0 && git push origin <BRANCH> v0.1.0
 ```
 
 Watch: `https://github.com/<GH_ORG>/<GH_REPO>/actions`

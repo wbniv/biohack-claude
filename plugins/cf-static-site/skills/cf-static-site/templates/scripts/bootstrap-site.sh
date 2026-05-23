@@ -87,8 +87,15 @@ command -v gh   &>/dev/null || die "gh CLI not found — https://cli.github.com"
 
 if ! $DRY_RUN; then
     gh auth status &>/dev/null || die "gh not authenticated — run: gh auth login"
-    [[ -n "${CF_API_TOKEN:-}" ]] \
-        || die "CF_API_TOKEN not set — run scripts/bootstrap.sh first to populate the cache"
+    [[ -n "${CF_API_TOKEN:-}" ]] || {
+        err "CF_API_TOKEN not set."
+        err "Create a token at https://dash.cloudflare.com/profile/api-tokens with:"
+        err "  Zone     | Zone Settings | Read   (all zones)"
+        err "  Zone     | DNS           | Edit   (all zones)"
+        err "  Account  | Cloudflare Pages | Edit"
+        err "Then: export CF_API_TOKEN=<token> && bash scripts/bootstrap-site.sh"
+        exit 1
+    }
     if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
         CF_ACCOUNT_ID=$(cf_api GET "/accounts?per_page=1" | jq -r '.result[0].id')
         [[ -n "$CF_ACCOUNT_ID" && "$CF_ACCOUNT_ID" != "null" ]] \
@@ -118,6 +125,36 @@ CF_ACCOUNT_ID="${CF_ACCOUNT_ID:-DRY_RUN_ACCOUNT_ID}"
 echo ""
 info "Bootstrap: Cloudflare Pages → https://${CUSTOM_DOMAIN}/"
 echo ""
+
+# ════════════════════════════════════════════════════════════════════════════
+# Step 0 — Remove www-redirect Page Rules
+# Old hosting setups often leave a Cloudflare Page Rule forwarding the apex
+# to www.<DOMAIN>. That rule wins over Pages and must be removed first.
+# ════════════════════════════════════════════════════════════════════════════
+
+info "[0] Looking for www-redirect Page Rules to remove"
+if $DRY_RUN; then
+    echo "  [dry-run] GET /zones/.../pagerules — check for www forwarding rules"
+else
+    CF_ZONE_ID=$(cf_api GET "/zones?name=${CUSTOM_DOMAIN}" | jq -r '.result[0].id')
+    [[ -n "$CF_ZONE_ID" && "$CF_ZONE_ID" != "null" ]] \
+        || die "[0] Zone for ${CUSTOM_DOMAIN} not found — check token has Zone:Read"
+    export CF_ZONE_ID
+    cache_set CF_ZONE_ID "$CF_ZONE_ID"
+    info "[0] Zone ID: $CF_ZONE_ID"
+
+    PAGE_RULES=$(cf_api GET "/zones/${CF_ZONE_ID}/pagerules?status=active" \
+        | jq -r '.result[] | select(.actions[].id == "forwarding_url") | .id' || true)
+    if [[ -n "$PAGE_RULES" ]]; then
+        while IFS= read -r rule_id; do
+            info "[0] Deleting Page Rule $rule_id (forwarding_url)"
+            cf_api DELETE "/zones/${CF_ZONE_ID}/pagerules/${rule_id}" >/dev/null
+            ok "[0] Deleted Page Rule $rule_id"
+        done <<< "$PAGE_RULES"
+    else
+        ok "[0] No forwarding Page Rules found"
+    fi
+fi
 
 # ════════════════════════════════════════════════════════════════════════════
 # Step 1 — Create Pages project
