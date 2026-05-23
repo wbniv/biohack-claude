@@ -17,7 +17,8 @@ GH_REPO="<GH_ORG>/<GH_REPO>"
 PAGES_PROJECT="<PROJECT_NAME>"
 CUSTOM_DOMAIN="<DOMAIN>"
 CI_TOKEN_NAME="<SLUG>-site-ci"
-BOOTSTRAP_CACHE="${BASH_SOURCE[0]%/scripts/*}/.creds/bootstrap.env"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BOOTSTRAP_CACHE="${REPO_ROOT}/.creds/bootstrap.env"
 
 DRY_RUN=false
 
