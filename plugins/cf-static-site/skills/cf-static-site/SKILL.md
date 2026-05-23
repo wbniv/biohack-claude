@@ -238,17 +238,18 @@ lives in a subdirectory.
 
 ### Prerequisite
 
-`CF_API_TOKEN` must be set with `Zone:Read`, `DNS:Edit`, and `Account | Pages Write`
-permissions. On first run, export it and the script will cache it in `.creds/bootstrap.env`
-(gitignored) for subsequent runs:
+On first run, `bootstrap-site.sh` prints step-by-step instructions for creating
+a Cloudflare API token and prompts for it interactively (`read -rsp`). The token
+is cached to `.creds/bootstrap.env` (gitignored) — subsequent runs load it
+silently without prompting again.
 
+Just run:
 ```sh
-export CF_API_TOKEN=<token>
 bash scripts/bootstrap-site.sh
 ```
 
-Subsequent runs load creds from `.creds/bootstrap.env` automatically — no need to
-re-export.
+Required token permissions: `Zone | Zone Settings | Read`, `Zone | DNS | Edit`,
+`Account | Cloudflare Pages | Edit`.
 
 The operator token **must** include `Account | Pages Write`. `bootstrap-site.sh`
 checks for this and exits 1 with instructions if the permission is missing.
