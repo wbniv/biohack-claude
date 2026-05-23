@@ -20,7 +20,7 @@ tasks:
     desc: Generate biohack.net/claude/index.html and open for review
     cmds:
       - bash scripts/gen-biohack-skills-page.sh
-      - task md -- {{.BIOHACK_NET_DIR | default (printf "%s/SRC/biohack-net" .HOME)}}/claude/index.html
+      - task md -- {{.BIOHACK_NET_DIR | default (printf "%s/SRC/biohack.net" .HOME)}}/claude/index.html
     vars:
       HOME:
         sh: echo $HOME

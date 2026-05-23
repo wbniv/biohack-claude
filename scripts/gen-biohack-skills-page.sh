@@ -5,7 +5,7 @@ set -euo pipefail
 # Writes to ~/SRC/biohack-net/claude/index.html (creates the directory if needed).
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIOHACK_NET="${BIOHACK_NET_DIR:-${HOME}/SRC/biohack-net}"
+BIOHACK_NET="${BIOHACK_NET_DIR:-${HOME}/SRC/biohack.net}"
 OUT_DIR="${BIOHACK_NET}/claude"
 OUT_FILE="${OUT_DIR}/index.html"
 
