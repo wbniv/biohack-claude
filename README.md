@@ -36,6 +36,12 @@ Then install any plugin individually:
 |--------|-------------|
 | [`import-claude-design`](plugins/import-claude-design/) | Import a Claude Design export zip into site/ and deploy via tag-triggered CI |
 
+## 🐚 GNOME extensions
+
+| Extension | What it does |
+|-----------|-------------|
+| [`Claude Usage Indicator`](gnome/) | Shows Claude.ai weekly usage % in the GNOME top panel and dock — [wbniv/claude-usage](https://github.com/wbniv/claude-usage) |
+
 ## ◆ personal (biohack-shell)
 
 [`biohack-shell`](plugins/biohack-shell/) bundles the tab-colour hooks and slash

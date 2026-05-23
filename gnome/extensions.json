@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Claude Usage Indicator",
+    "uuid": "claude-usage@indri.studio",
+    "description": "Shows your Claude.ai weekly usage % in the GNOME top panel and dock.",
+    "repo": "https://github.com/wbniv/claude-usage",
+    "gnome-versions": ["45", "46", "47", "48", "49", "50"]
+  }
+]

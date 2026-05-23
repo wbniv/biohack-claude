@@ -98,6 +98,36 @@ for cat in order:
     if cat in by_category:
         sections += render_category(cat, by_category[cat])
 
+# GNOME extensions section
+gnome_ext_path = os.path.join(repo, "gnome", "extensions.json")
+gnome_section = ""
+if os.path.isfile(gnome_ext_path):
+    with open(gnome_ext_path) as f:
+        gnome_exts = json.load(f)
+    rows = ""
+    for ext in gnome_exts:
+        name_esc = html.escape(ext["name"])
+        desc_esc = html.escape(ext["description"])
+        repo_url = html.escape(ext.get("repo", ""))
+        repo_link = f'<a href="{repo_url}">{repo_url.replace("https://github.com/", "")}</a>' if repo_url else ""
+        uuid_esc  = html.escape(ext.get("uuid", ""))
+        clone_dir = repo_url.split("/")[-1]
+        install = f"""<pre class="install"><code>git clone {repo_url}
+ln -s \$PWD/{clone_dir}/gnome-extension \\
+  ~/.local/share/gnome-shell/extensions/{uuid_esc}
+gnome-extensions enable {uuid_esc}</code></pre>"""
+        rows += f"""
+      <div class="plugin">
+        <h3>{name_esc}</h3>
+        <p>{desc_esc}</p>
+        {install}
+      </div>"""
+    gnome_section = f"""
+    <section class="category" id="gnome">
+      <h2>🐚 GNOME extensions</h2>
+      {rows}
+    </section>"""
+
 page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,6 +153,7 @@ page = f"""<!DOCTYPE html>
   </p>
   <pre class="install"><code>/plugin marketplace add wbniv/biohack-claude</code></pre>
   {sections}
+  {gnome_section}
 </body>
 </html>
 """
