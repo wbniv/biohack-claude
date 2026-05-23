@@ -248,8 +248,8 @@ Just run:
 bash scripts/bootstrap-site.sh
 ```
 
-Required token permissions: `Zone | Zone Settings | Read`, `Zone | DNS | Edit`,
-`Account | Cloudflare Pages | Edit`.
+Required token permissions: `Zone | DNS | Edit` (all zones), `Account | Cloudflare Pages | Edit`.
+Account ID is derived from the zone — no `Account Settings Read` needed.
 
 The operator token **must** include `Account | Pages Write`. `bootstrap-site.sh`
 checks for this and exits 1 with instructions if the permission is missing.

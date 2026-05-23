@@ -97,7 +97,6 @@ if ! $DRY_RUN; then
         echo "  Click '+ Create Token' → 'Get started' next to 'Create Custom Token'"
         echo "  Name: <SLUG>-operator"
         echo "  Permissions:"
-        echo "    Zone    | Zone Settings | Read  (all zones)"
         echo "    Zone    | DNS           | Edit  (all zones)"
         echo "    Account | Cloudflare Pages | Edit"
         echo "  Account Resources: Include → select your account"
@@ -110,9 +109,10 @@ if ! $DRY_RUN; then
         cache_set CF_API_TOKEN "$CF_API_TOKEN"
     fi
     if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
-        CF_ACCOUNT_ID=$(cf_api GET "/accounts?per_page=1" | jq -r '.result[0].id')
+        ZONE_RESP=$(cf_api GET "/zones?name=${CUSTOM_DOMAIN}")
+        CF_ACCOUNT_ID=$(echo "$ZONE_RESP" | jq -r '.result[0].account.id')
         [[ -n "$CF_ACCOUNT_ID" && "$CF_ACCOUNT_ID" != "null" ]] \
-            || die "Could not retrieve CF_ACCOUNT_ID — check CF_API_TOKEN permissions"
+            || die "Could not retrieve CF_ACCOUNT_ID from zone ${CUSTOM_DOMAIN} — check token has DNS:Edit"
         export CF_ACCOUNT_ID
         cache_set CF_ACCOUNT_ID "$CF_ACCOUNT_ID"
     fi
