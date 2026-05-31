@@ -1,6 +1,7 @@
 {
   "name": "aws-billing-tags",
   "description": "Set up AWS cost tracking, billing tags, budget alerts, and Cost Explorer for a project.",
+  "category": "techops",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"

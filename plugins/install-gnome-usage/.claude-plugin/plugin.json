@@ -1,6 +1,7 @@
 {
   "name": "install-gnome-usage",
   "description": "One-shot installer for the Claude Usage Indicator GNOME extension. Self-removes after install.",
+  "category": "techops",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"

@@ -1,6 +1,7 @@
 {
   "name": "import-claude-design",
   "description": "Import a Claude Design export zip into site/ and deploy via tag-triggered CI.",
+  "category": "design",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"

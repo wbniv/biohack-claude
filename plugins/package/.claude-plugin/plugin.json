@@ -1,6 +1,7 @@
 {
   "name": "package",
   "description": "Package a program as a Debian-policy-compliant .deb for a foundry-style apt repo. Handles binaries, scripts, and source packages.",
+  "category": "techops",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"

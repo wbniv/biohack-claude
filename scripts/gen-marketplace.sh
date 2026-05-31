@@ -53,17 +53,24 @@ for entry in sorted(os.listdir(plugins_dir)):
     with open(pj_path) as f:
         pj = json.load(f)
 
+    existing = next((p for p in mp.get("plugins", []) if p.get("name") == pj["name"]), None)
+
     record = {
         "name": pj["name"],
         "description": pj.get("description", ""),
         "author": pj.get("author", {}),
     }
-    if "category" in pj:
-        record["category"] = pj["category"]
+    # Category lives in the plugin's own plugin.json; fall back to the existing
+    # manifest entry so a hand-set category is never silently dropped.
+    category = pj.get("category") or (existing.get("category") if existing else None)
+    if category:
+        record["category"] = category
+        if "category" not in pj:
+            print(f"WARN: {entry}/.claude-plugin/plugin.json has no 'category'; "
+                  f"kept '{category}' from existing manifest", file=sys.stderr)
     record["source"] = f"./plugins/{entry}"
 
     # Preserve any MCP or extra source metadata from existing entry
-    existing = next((p for p in mp.get("plugins", []) if p["name"] == record["name"]), None)
     if existing and existing.get("source", "").startswith("{"):
         record["source"] = existing["source"]
     if existing and "homepage" in existing:

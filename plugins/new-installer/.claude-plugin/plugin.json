@@ -1,6 +1,7 @@
 {
   "name": "new-installer",
   "description": "Scaffold a new one-shot self-removing installer command for the biohack-claude marketplace.",
+  "category": "meta",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"

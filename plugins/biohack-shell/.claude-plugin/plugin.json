@@ -1,6 +1,7 @@
 {
   "name": "biohack-shell",
   "description": "Tab colour hooks (session-start / stop / prompt-submit) and productivity slash commands from Will's personal Claude Code setup.",
+  "category": "personal",
   "author": {
     "name": "Will Norris",
     "url": "https://biohack.net"
