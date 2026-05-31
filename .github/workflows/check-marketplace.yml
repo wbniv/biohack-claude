@@ -24,4 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/check-marketplace.sh
+
+      # Structural guard: every plugins/* dir is registered, and vice versa.
+      # Runs first because it gives a precise message for the common case.
+      - name: Registration check
+        run: bash scripts/check-marketplace.sh
+
+      # Drift guard: the committed manifest must equal generator output, so a
+      # changed description / author / category in a plugin.json can't go stale.
+      - name: Manifest matches generator output
+        run: |
+          bash scripts/gen-marketplace.sh
+          if ! git diff --exit-code .claude-plugin/marketplace.json; then
+            echo "::error::.claude-plugin/marketplace.json is stale. Run 'task gen-marketplace' and commit the result." >&2
+            exit 1
+          fi
