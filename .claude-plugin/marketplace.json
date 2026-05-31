@@ -87,6 +87,24 @@
       },
       "category": "personal",
       "source": "./plugins/biohack-shell"
+    },
+    {
+      "name": "install-gnome-usage",
+      "description": "One-shot installer for the Claude Usage Indicator GNOME extension. Self-removes after install.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "techops",
+      "source": "./plugins/install-gnome-usage"
+    },
+    {
+      "name": "new-installer",
+      "description": "Scaffold a one-shot self-removing installer command — for any marketplace plugin or as a standalone slash command. Verify, install, vanish.",
+      "author": {
+        "name": "Will Norris"
+      },
+      "category": "meta",
+      "source": "./plugins/new-installer"
     }
   ]
 }
