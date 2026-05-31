@@ -1,0 +1,27 @@
+name: check-marketplace
+
+# Fail if a plugin under plugins/ is missing from .claude-plugin/marketplace.json
+# (or vice versa). Guards against `/plugin install <name>@biohack-claude` returning
+# "not found in marketplace" because a new plugin was added but never registered.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - '.claude-plugin/marketplace.json'
+      - 'scripts/check-marketplace.sh'
+      - '.github/workflows/check-marketplace.yml'
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - '.claude-plugin/marketplace.json'
+      - 'scripts/check-marketplace.sh'
+      - '.github/workflows/check-marketplace.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-marketplace.sh

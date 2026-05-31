@@ -16,6 +16,11 @@ tasks:
     cmds:
       - bash scripts/gen-marketplace.sh
 
+  check-marketplace:
+    desc: Verify every plugins/* dir is registered in marketplace.json (and vice versa)
+    cmds:
+      - bash scripts/check-marketplace.sh
+
   publish-site:
     desc: Generate biohack.net/claude/index.html and open for review
     cmds:
