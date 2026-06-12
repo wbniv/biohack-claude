@@ -1,7 +1,7 @@
 ---
 name: claude-housekeeping
 description: Scan all Claude Code project artifacts (memories, hooks, commands, plans, settings) across global ~/.claude and every project in ~/.claude/projects.json. Produce a numbered list of drift recommendations plus an executable command list, state-visualization table, and mermaid graphs. Never auto-applies — user must approve recommendations explicitly. Use when the user says "housekeeping", "/claude-housekeeping", "audit my claude config", "find drift", or wants a daily/weekly snapshot of their Claude setup health.
-version: 1.1.0
+version: 1.3.0
 ---
 
 # Housekeeping
@@ -96,6 +96,7 @@ When invoked as `/claude-housekeeping --report-only --auto-reschedule` (i.e., fi
 1. **Orphan plans** in `~/.claude/plans/*.md` older than `--threshold-days` (default 1).
    - Skip `screenshots/`.
    - Recommend: route to a likely project's `docs/plans/` (content-sniffing for project signals), or delete if trivially-small / shipped-duplicate.
+   - **Caution — most orphans are already-migrated working copies.** Plan-mode plans get auto-migrated into a project's `docs/plans/` under a dated slug; the file left in `~/.claude/plans/` is the orphaned original. **Before routing, check the target project's `docs/plans/` for an existing canonical** (same H1 / topic, possibly a different slug or date). If one exists, **delete the orphan** — routing it creates a near-duplicate. Only genuinely-unmigrated plans should be routed.
 
 2. **Duplicate memories** — same-filename `feedback_*.md` across ≥3 projects.
    - Recommend: promote to `~/.claude/memory/<name>.md` (create global index if absent), delete per-project copies. Show content diff if copies aren't identical.
@@ -110,8 +111,18 @@ When invoked as `/claude-housekeeping --report-only --auto-reschedule` (i.e., fi
 
 6. **Uncommitted/untracked `.claude/` changes** — modified or untracked artifacts (skills, commands, memory, hooks, `settings.json`, `CLAUDE.md`) in either the homedir repo (covers global `~/.claude/`) or any project repo (covers `~/SRC/<project>/.claude/`). Skips ephemeral subdirs (sessions, cache, daemon, telemetry, backups, etc.) and `.bak`/`~`/`.tmp`/`.swp` files. Catches in-flight skill development, untracked auto-memory files, and config edits that never got committed.
 
-7. **Missing global memory cascade** — Claude's auto-memory loader is cwd-siloed: only `~/.claude/projects/{slug}/memory/` loads, so the global memories at `~/.claude/projects/-home-will/memory/` never reach project sessions. This scan detects, per active project, global memory files not yet symlinked into `<project>/.claude/memory/`. Also catches stale symlinks (target deleted) and real-file collisions (project has a same-named local memory).
-   - Recommend: create symlinks via the `apply-cascade.py` helper, which also merges the global `MEMORY.md` sections into the project's `MEMORY.md` between auto-managed markers and updates `.gitignore` so the symlinks don't get committed into the project repo. Collisions are surfaced but never overwritten.
+7. **Missing global memory cascade (scope-aware)** — Claude's auto-memory loader is cwd-siloed: only `~/.claude/projects/{slug}/memory/` loads, so the global memories at `~/.claude/memory/` never reach project sessions. But **not every global memory belongs in every project** — most are situational (a `bangkok_cost_estimates` memory is noise in a C++ engine; `wayland_keybindings` is noise in a web project). So the cascade is **scoped**, not blanket:
+   - Each global memory declares **`applies-to: [tag, …]`** in its frontmatter (`universal` / `web` / `legacy-cpp` / `desktop` / `bkk` / …). Absent → treated as `universal` (back-compat).
+   - Each project declares **`tags: [...]`** in `projects.json`. A memory cascades into a project iff it's `universal` **or** its `applies-to` intersects the project's `tags`. Untagged project → `universal` memories only (safe default).
+   - This scan detects, per active project: **qualifying** global memories not yet symlinked in (to add), symlinks to memories that **no longer qualify** for the project's scope (to prune), stale symlinks (target deleted), and real-file collisions (project has a same-named local memory).
+   - Recommend: run the `apply-cascade.py` helper, which symlinks only qualifying memories, **prunes out-of-scope ones**, merges the global `MEMORY.md` sections into the project's `MEMORY.md` between auto-managed markers, and updates `.gitignore`. Collisions are surfaced but never overwritten.
+   - **Project-specific memories don't belong in global.** A memory that names one project (e.g. *"In ~/SRC/trip, …"*) should live as a real file in that project's `.claude/memory/`, not in the global dir (see scan #8).
+
+8. **Hook checksum drift** — entries in `~/.claude/hook-checksums.json` whose recorded sha256 no longer matches the live `~/SRC/python-tui-lib/hooks/*.sh`. Happens when a shared hook changes (an uncommitted edit, or a `git pull` in python-tui-lib) without the manifest being regenerated; `hook-runner.sh` then refuses to run the drifted hook (warn, not block), so it silently stops firing (e.g. `md-preview.sh` no longer auto-renders edited `.md`).
+   - Recommend: **audit the python-tui-lib diff first** (the regen trusts whatever is on disk), then `regen-hook-checksums.sh --global`, then verify live==recorded. Full steps in [`runbooks/hook-checksum-remediation.md`](runbooks/hook-checksum-remediation.md). Pairs with scan #5 (broken-hook-paths) as the two halves of hook integrity.
+
+9. **Installed skill ≠ git source** — a skill under `~/.claude/skills/` that differs from its git-tracked plugin source under `~/SRC/biohack-claude/plugins/*/skills/`. The live copy was edited in place, or the published plugin is a stale snapshot — the two rot apart.
+   - Recommend: pick the canonical side (usually the live, more-evolved copy), sync the other, and commit the source.
 
 ## Report file format
 

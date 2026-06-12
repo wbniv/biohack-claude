@@ -10,12 +10,15 @@ Usage:
 
 For the given project:
   1. Symlinks each .md in ~/.claude/memory/ (excluding MEMORY.md and
-     memory-visualization.md) into <project>/.claude/memory/ using
-     RELATIVE paths (e.g. ../../../../.claude/memory/<name>) so the
-     symlinks survive being checked into a project repo and cloned at
-     a different absolute path.
-  2. Removes stale symlinks (project-side symlinks pointing into the
-     current or legacy global memory dir whose target no longer exists).
+     memory-visualization.md) that is IN SCOPE for the project into
+     <project>/.claude/memory/, using RELATIVE paths (e.g.
+     ../../../../.claude/memory/<name>) so the symlinks survive being
+     checked into a project repo and cloned at a different absolute path.
+     In scope = the memory's `applies-to:` frontmatter is `universal` OR
+     intersects the project's `tags` (projects.json). Untagged project →
+     `universal` memories only.
+  2. Removes stale symlinks (target no longer exists) AND prunes symlinks
+     to memories that are no longer in scope for the project.
   3. Merges global MEMORY.md sections into <project>/.claude/memory/MEMORY.md
      between auto-managed markers, preserving everything outside the markers.
      Index source: ~/.claude/projects/-home-will/memory/MEMORY.md (the
@@ -30,6 +33,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -51,6 +55,42 @@ EXCLUDED_NAMES = {"MEMORY.md", "memory-visualization.md"}
 
 MEMORY_BEGIN = "<!-- BEGIN GLOBAL MEMORY (managed by claude-housekeeping; do not edit) -->"
 MEMORY_END = "<!-- END GLOBAL MEMORY -->"
+
+PROJECTS_JSON = HOME / ".claude" / "projects.json"
+_APPLIES_RE = re.compile(r"^applies-to:\s*\[([^\]]*)\]", re.MULTILINE)
+
+
+def _load_project_tags(project_path: Path) -> set[str]:
+    """Scope tags for this project from projects.json (empty set if unknown →
+    the project receives only `universal` memories)."""
+    try:
+        data = json.loads(PROJECTS_JSON.read_text())
+    except Exception:
+        return set()
+    rp = project_path.resolve()
+    for entry in data.get("projects", []):
+        ep = Path(os.path.expanduser(entry.get("path", ""))).resolve()
+        if ep == rp or entry.get("name") == project_path.name:
+            return set(entry.get("tags", []))
+    return set()
+
+
+def _memory_applies_to(md_file: Path) -> set[str]:
+    """`applies-to: [a, b]` from a memory's frontmatter. Absent → {'universal'}
+    (back-compat: an untagged memory still cascades everywhere)."""
+    try:
+        head = md_file.read_text()[:2000]
+    except Exception:
+        return {"universal"}
+    m = _APPLIES_RE.search(head)
+    if not m:
+        return {"universal"}
+    return {t.strip() for t in m.group(1).split(",") if t.strip()}
+
+
+def _qualifies(applies_to: set[str], project_tags: set[str]) -> bool:
+    """A memory belongs in a project if it's universal or their tags intersect."""
+    return "universal" in applies_to or bool(applies_to & project_tags)
 
 
 def main() -> int:
@@ -75,6 +115,14 @@ def main() -> int:
         if f.name not in EXCLUDED_NAMES
     )
 
+    # Scope filter: only cascade a memory into this project if it's `universal`
+    # or its `applies-to:` tags intersect the project's `tags` (projects.json).
+    # Memories that don't qualify are pruned from the project below.
+    project_tags = _load_project_tags(project_path)
+    qualifying = [f for f in global_files
+                  if _qualifies(_memory_applies_to(f), project_tags)]
+    disqualified = {f.name for f in global_files} - {f.name for f in qualifying}
+
     created: list[str] = []
     relinked: list[str] = []
     kept: list[str] = []
@@ -85,7 +133,7 @@ def main() -> int:
     # written in RELATIVE form (e.g. ../../../../.claude/memory/<name>) so
     # they survive being checked into a project repo and cloned at a
     # different absolute path.
-    for gf in global_files:
+    for gf in qualifying:
         target = project_memory_dir / gf.name
         relative_target = os.path.relpath(gf, target.parent)
         if target.is_symlink():
@@ -127,7 +175,10 @@ def main() -> int:
         if not in_sweep_target:
             continue
         if not entry.resolve().exists():
-            entry.unlink()
+            entry.unlink()                       # stale: target deleted
+            removed.append(entry.name)
+        elif entry.name in disqualified:
+            entry.unlink()                       # out of scope for this project now
             removed.append(entry.name)
 
     merge_memory_md(project_memory_dir / "MEMORY.md")

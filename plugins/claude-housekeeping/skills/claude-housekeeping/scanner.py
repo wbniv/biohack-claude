@@ -43,6 +43,7 @@ CATEGORIES_ORDER = [
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
     ("broken-hook-paths", "Hook commands referencing missing scripts"),
+    ("hook-checksum-drift", "Hook checksum drift (manifest vs live python-tui-lib)"),
     ("uncommitted",    "Uncommitted/untracked `.claude/` changes"),
     ("orphan-plans",   "Orphan plans in `~/.claude/plans/`"),
     ("dup-memories",   "Cross-project duplicate memories"),
@@ -50,6 +51,7 @@ CATEGORIES_ORDER = [
     ("leaked-project-memories", "Project-scope memories in a global dir"),
     ("dup-commands",   "Cross-project duplicate commands"),
     ("skill-frontmatter", "Skills with missing required frontmatter fields"),
+    ("skill-install-drift", "Installed skill ≠ git plugin source"),
     ("missing-md-history", "Durable docs missing HISTORY.md sidecar"),
 ]
 CATEGORY_DESC = dict(CATEGORIES_ORDER)
@@ -95,6 +97,7 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
     "config-drift":      "Per-project settings.json entries that duplicate hooks already fired globally.",
     "broken-hook-paths": "Hook commands in global or per-project settings.json whose referenced `.sh` script doesn't exist on disk after env-var expansion — catches stale paths left after refactors or env-var typos.",
+    "hook-checksum-drift": "Entries in `~/.claude/hook-checksums.json` whose recorded sha256 no longer matches the live `~/SRC/python-tui-lib/hooks/*.sh` — a hook changed (uncommitted edit or a pull) without regenerating the manifest, so hook-runner.sh refuses to run it. Remediate via the runbook (audit diff → regen → verify).",
     "uncommitted":       "Modified or untracked Claude artifacts (skills, commands, memory, hooks, settings) sitting uncommitted in the homedir repo or any project repo — surfaces in-flight work that didn't get a commit.",
     "orphan-plans":      "Markdown files in `~/.claude/plans/` older than the threshold (default 1 day) that look like real plans worth routing.",
     "dup-memories":      "Same-filename `feedback_*.md` across ≥3 real project memory dirs (worktrees excluded) — candidates for promotion to global.",
@@ -102,6 +105,7 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "leaked-project-memories": "Files matching `project_*.md` or `reference_*.md` (the project-scope naming convention) found in a global memory dir. They should live in their owning project's `.claude/memory/` as a real file, not in global.",
     "dup-commands":      "Commands at `~/.claude/commands/*.md` that also appear in real project dirs (worktrees excluded).",
     "skill-frontmatter": "SKILL.md files missing YAML frontmatter, or whose frontmatter is missing any of name/description/version. Catches skills that slipped in before formalization.",
+    "skill-install-drift": "An installed skill under `~/.claude/skills/` differs from its git-tracked plugin source under `~/SRC/biohack-claude/plugins/*/skills/` — the live copy was edited in place, or the published plugin is stale. Pick the canonical side, sync the other, commit the source.",
     "missing-md-history": "Durable markdown docs (plans, investigations, CLAUDE.md, README.md) without a sibling `HISTORY.md`. The pre-commit hook seeds them on next edit; this scan lets you bulk-fix dormant docs on demand.",
 }
 
@@ -118,6 +122,7 @@ class Project:
     status: str            # "active" | "dormant"
     notes: str = ""
     summary: str = ""
+    tags: list[str] = field(default_factory=list)   # scope tags for the memory cascade (web/legacy-cpp/desktop/bkk/…)
 
     @property
     def claude_dir(self) -> Path:     return self.path / ".claude"
@@ -161,6 +166,7 @@ def load_projects() -> list[Project]:
             status=entry.get("status", "active"),
             notes=entry.get("notes", ""),
             summary=entry.get("summary", ""),
+            tags=list(entry.get("tags", [])),
         )
         out.append(p)
     return out
@@ -358,6 +364,107 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
     )]
 
 
+def scan_hook_checksum_drift() -> list[Recommendation]:
+    """The global ~/.claude/hook-checksums.json manifest should match the live
+    python-tui-lib hooks. A mismatch means a hook changed (uncommitted edit, or a
+    python-tui-lib pull) without the manifest being regenerated — hook-runner.sh
+    then refuses to run that hook until the manifest is refreshed."""
+    manifest = GLOBAL_CLAUDE / "hook-checksums.json"
+    hooks_dir = HOME / "SRC" / "python-tui-lib" / "hooks"
+    if not manifest.is_file() or not hooks_dir.is_dir():
+        return []   # no checksum wrapper in use, or the hooks lib is absent
+    try:
+        recorded = json.loads(manifest.read_text())
+    except Exception as e:
+        return [Recommendation(
+            category="hook-checksum-drift",
+            title="hook-checksums.json is unparseable JSON",
+            details=f"Error: `{e}`",
+            command_block=f"# Hand-fix {manifest}, or regenerate it (see the runbook).",
+            severity="regress",
+        )]
+
+    rows = []
+    for name, rec_sha in sorted(recorded.items()):
+        live = hooks_dir / name
+        if not live.is_file():
+            rows.append((name, "missing on disk", "❌"))
+        elif sha256_of(live) != rec_sha:
+            rows.append((name, "live ≠ manifest", "⚠️"))
+    if not rows:
+        return []
+
+    table = "| Hook | State | |\n|---|---|---|\n" + \
+            "\n".join(f"| `{n}` | {s} | {m} |" for n, s, m in rows)
+    runbook = GLOBAL_CLAUDE / "skills" / "claude-housekeeping" / "runbooks" / "hook-checksum-remediation.md"
+    return [Recommendation(
+        category="hook-checksum-drift",
+        title=f"Hook checksum drift: {len(rows)} hook(s) out of sync with the manifest",
+        details=(
+            f"{table}\n\n"
+            "`hook-runner.sh` verifies each hook's sha256 against "
+            "`~/.claude/hook-checksums.json` and refuses to run a hook whose live "
+            f"content drifted. **Runbook**: [`{runbook.name}`](file://{runbook}). "
+            "**Audit the python-tui-lib diff before regenerating** — the regen trusts "
+            "whatever is on disk."
+        ),
+        command_block=(
+            "# 1. Audit what changed in the shared hooks (do NOT blindly trust):\n"
+            "git -C $HOME/SRC/python-tui-lib status --short hooks/\n"
+            "git -C $HOME/SRC/python-tui-lib diff hooks/\n"
+            "# 2. If the change is intended/benign, regenerate the global manifest:\n"
+            "bash $HOME/SRC/python-tui-lib/scripts/regen-hook-checksums.sh --global\n"
+            "# 3. Verify a drifted hook now matches (live == recorded):\n"
+            "#   sha256sum $HOME/SRC/python-tui-lib/hooks/<name>.sh\n"
+            "#   jq -r '.\"<name>.sh\"' $HOME/.claude/hook-checksums.json"
+        ),
+        severity="warn",
+    )]
+
+
+def scan_skill_install_drift() -> list[Recommendation]:
+    """Installed skills under ~/.claude/skills/ should match their git-tracked
+    plugin source (the marketplace copy). Divergence means the live skill was
+    edited in place, or the plugin is a stale publish — the two rot apart."""
+    skills_dir = GLOBAL_CLAUDE / "skills"
+    plugins_dir = HOME / "SRC" / "biohack-claude" / "plugins"
+    if not skills_dir.is_dir() or not plugins_dir.is_dir():
+        return []
+    rows = []
+    for inst in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
+        src = next((c for c in plugins_dir.glob(f"*/skills/{inst.name}") if c.is_dir()), None)
+        if src is None:
+            continue
+        diff = subprocess.run(
+            ["diff", "-rq", "--exclude=.history", "--exclude=__pycache__",
+             str(inst), str(src)],
+            capture_output=True, text=True,
+        )
+        if diff.stdout.strip():
+            rows.append((inst.name, len(diff.stdout.strip().splitlines())))
+    if not rows:
+        return []
+    table = "| Installed skill | Differing files |\n|---|---|\n" + \
+            "\n".join(f"| `{n}` | {c} |" for n, c in rows)
+    return [Recommendation(
+        category="skill-install-drift",
+        title=f"Installed skill ≠ git source: {len(rows)} skill(s) diverged",
+        details=(
+            f"{table}\n\n"
+            "A live skill under `~/.claude/skills/` differs from its git-tracked "
+            "plugin source. Decide which is canonical (usually the live, more-evolved "
+            "copy), sync the other, and commit the source so they don't rot apart."
+        ),
+        command_block=(
+            "# Inspect the divergence (live vs plugin source), then sync the stale side:\n"
+            "diff -rq --exclude=.history --exclude=__pycache__ \\\n"
+            "  $HOME/.claude/skills/<skill> \\\n"
+            "  $HOME/SRC/biohack-claude/plugins/*/skills/<skill>"
+        ),
+        severity="info",
+    )]
+
+
 def scan_missing_project_settings(projects: list[Project]) -> list[Recommendation]:
     """Active projects without .claude/settings.json — won't get the global hook chain bonuses
        (well, technically global fires regardless — but project-specific hooks have no home)."""
@@ -479,19 +586,45 @@ def _global_cascade_sources() -> list[Path]:
     )
 
 
+_CASCADE_APPLIES_RE = re.compile(r"^applies-to:\s*\[([^\]]*)\]", re.MULTILINE)
+
+
+def _memory_applies_to(md_file: Path) -> set[str]:
+    """`applies-to: [...]` from a memory's frontmatter; absent → {'universal'}
+    (back-compat: an untagged memory still cascades everywhere). Mirrors the
+    same helper in apply-cascade.py."""
+    try:
+        m = _CASCADE_APPLIES_RE.search(md_file.read_text()[:2000])
+    except OSError:
+        return {"universal"}
+    if not m:
+        return {"universal"}
+    return {t.strip() for t in m.group(1).split(",") if t.strip()}
+
+
+def _cascade_qualifies(applies_to: set[str], project_tags: set[str]) -> bool:
+    return "universal" in applies_to or bool(applies_to & project_tags)
+
+
 def _classify_cascade_state(project: Project, sources: list[Path]) -> tuple[list[str], list[str], list[str]]:
-    """Return (missing, stale, collisions) filenames for one project.
-    - missing: a source exists but the project has no entry of that name
-    - stale: project has a symlink into the global memory dir whose target is gone
-    - collisions: project has a real (non-symlink) file with the same name as a source
+    """Return (missing, stale, collisions) filenames for one project, respecting
+    each memory's `applies-to:` scope against the project's `tags`.
+    - missing: a *qualifying* source the project doesn't have a symlink for yet
+    - stale: a symlink whose target is gone, OR a symlink to a memory that no
+      longer qualifies for this project's scope (both get pruned by apply-cascade)
+    - collisions: a real (non-symlink) file with the same name as a qualifying source
     """
+    project_tags = set(project.tags or [])
+    qualifying = [s for s in sources
+                  if _cascade_qualifies(_memory_applies_to(s), project_tags)]
+    disqualified_names = {s.name for s in sources} - {s.name for s in qualifying}
+
     missing: list[str] = []
     collisions: list[str] = []
     mem_dir = project.memory_dir
 
     if mem_dir.is_dir():
-        source_names = {s.name for s in sources}
-        for src in sources:
+        for src in qualifying:
             target = mem_dir / src.name
             if target.is_symlink():
                 try:
@@ -505,9 +638,19 @@ def _classify_cascade_state(project: Project, sources: list[Path]) -> tuple[list
             else:
                 missing.append(src.name)
         stale = _find_stale_cascade_symlinks(mem_dir)
+        # Symlinks to memories that exist but no longer apply to this project's
+        # scope — apply-cascade prunes these, so surface them in the same bucket.
+        for entry in mem_dir.iterdir():
+            if (entry.is_symlink() and entry.name in disqualified_names
+                    and entry.name not in stale):
+                try:
+                    if entry.resolve().exists():
+                        stale.append(entry.name)
+                except OSError:
+                    pass
     else:
-        # Memory dir doesn't exist yet — every source is "missing"
-        missing = [s.name for s in sources]
+        # Memory dir doesn't exist yet — every qualifying source is "missing"
+        missing = [s.name for s in qualifying]
         stale = []
 
     return missing, stale, collisions
@@ -1322,6 +1465,25 @@ for name in {' '.join(f'"{n}"' for n in missing)}; do
   test -L "{mem_dir}/$name" || {{ echo "MISSING: {mem_dir}/$name" >&2; exit 1; }}
 done
 echo "OK: cascaded {len(missing)} memor{'y' if len(missing) == 1 else 'ies'} into {project.name}"
+
+# Commit the cascade's tracked-symlink churn (cascade symlinks are tracked in
+# most project repos, so adds/prunes + the MEMORY.md refresh show as uncommitted
+# changes). Stage ONLY the cascade paths and PARTIAL-commit them — never
+# `git add -A`, never `git reset` — so any other work you have staged in this
+# repo is left exactly as it was. Includes MEMORY.md + symlinks (new/pruned);
+# skips real local memory files and non-git projects.
+( cd "{project.path}" && git rev-parse --git-dir >/dev/null 2>&1 && {{
+    paths=()
+    while IFS= read -r line; do
+      f="${{line:3}}"; b="$(basename "$f")"
+      {{ [ "$b" = "MEMORY.md" ] || [ -L "$f" ] || [ ! -e "$f" ]; }} && paths+=("$f")
+    done < <(git status --porcelain -- .claude/memory/)
+    if [ "${{#paths[@]}}" -gt 0 ]; then
+      git add -- "${{paths[@]}}" \
+        && git commit -q -m "chore(memory): sync scoped cascade symlinks" -- "${{paths[@]}}" \
+        && echo "committed ${{#paths[@]}} cascade memory change(s) in {project.name}"
+    fi
+}} ) || echo "note: cascade symlink changes left uncommitted in {project.name} (commit by hand)"
 # Rollback: cp -a "$BACKUP/MEMORY.md" "{mem_dir}/MEMORY.md" 2>/dev/null; [ -f "$BACKUP/.gitignore" ] && cp -a "$BACKUP/.gitignore" "{mem_dir}/.gitignore"; for name in {' '.join(f'"{n}"' for n in missing)}; do rm -f "{mem_dir}/$name"; done"""
 
 
@@ -2180,6 +2342,7 @@ def main() -> int:
     recs.extend(scan_missing_project_settings(scan_set))
     recs.extend(scan_config_drift(scan_set))
     recs.extend(scan_broken_hook_paths(scan_set))
+    recs.extend(scan_hook_checksum_drift())
     recs.extend(scan_uncommitted_claude_changes(scan_set))
     recs.extend(scan_orphan_plans(args.threshold_days))
     recs.extend(scan_duplicate_memories(scan_set))
@@ -2188,6 +2351,7 @@ def main() -> int:
     recs.extend(scan_duplicate_commands(scan_set))
     recs.extend(scan_missing_md_history(scan_set))
     recs.extend(scan_skill_frontmatter(scan_set))
+    recs.extend(scan_skill_install_drift())
 
     report_md = build_report(
         recs, all_projects,
