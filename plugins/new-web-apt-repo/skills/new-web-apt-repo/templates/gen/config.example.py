@@ -52,6 +52,21 @@ PAGE_DESCRIPTION = "Signed Debian/Ubuntu package archive for Your Project."
 # Leave empty to omit. The skill can fill this in from package content.
 LEDE_HTML = ""
 
+# ── enhanced listing ──────────────────────────────────────────────────
+# REPOLOGY_PROJECTS: map package-name → repology.org project name.
+# Packages listed here get a live "latest versions" badge below their
+# description, linking to https://repology.org/project/<name>/versions.
+# Typically used for vendored/source-built packages not in Ubuntu.
+# Example: {"ghidra": "ghidra", "f9dasm": "f9dasm"}
+REPOLOGY_PROJECTS: dict = {}
+
+# CHANGELOG_ENTRIES: map package-name → first changelog stanza body.
+# Shows as a CSS hover tooltip on the description cell.
+# Populate by copying the bullet text (not the header/footer) from
+# packages/*/debian/changelog, e.g.:
+#   "* Initial packaging of 1.2.3.\n* Patched build for Ubuntu 26.04."
+CHANGELOG_ENTRIES: dict = {}
+
 # README_HTML: rendered in a panel at the bottom of the root listing only.
 README_HTML = """
 <p>

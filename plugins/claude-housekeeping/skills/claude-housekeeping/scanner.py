@@ -42,7 +42,7 @@ CATEGORIES_ORDER = [
     ("global-hooks",   "Global hook chain"),
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
-    ("broken-hook-paths", "Hook commands referencing missing scripts"),
+    ("broken-hook-paths", "Hook/Taskfile commands referencing missing scripts"),
     ("hook-checksum-drift", "Hook checksum drift (manifest vs live python-tui-lib)"),
     ("uncommitted",    "Uncommitted/untracked `.claude/` changes"),
     ("orphan-plans",   "Orphan plans in `~/.claude/plans/`"),
@@ -63,7 +63,7 @@ CATEGORY_RANK = {k: i for i, (k, _) in enumerate(CATEGORIES_ORDER)}
 CATEGORY_COLUMNS: dict[str, list[str]] = {
     "missing-settings":  ["#", "Project"],
     "config-drift":      ["#", "Project", "Duplicate hooks"],
-    "broken-hook-paths": ["#", "Scope", "Event", "Hook command", "Resolves to"],
+    "broken-hook-paths": ["#", "Scope", "Event / task", "Command", "Resolves to"],
     "uncommitted":       ["#", "Scope", "Status", "File"],
     "orphan-plans":      ["#", "File", "Size", "Age", "Action"],
     "dup-memories":      ["#", "Memory", "Projects (≥3)", "Action"],
@@ -96,7 +96,7 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "global-hooks":      "Global ~/.claude/settings.json has the expected baseline hooks (transcript-logger, plan-first, plan-migrate, md-preview, etc.)",
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
     "config-drift":      "Per-project settings.json entries that duplicate hooks already fired globally.",
-    "broken-hook-paths": "Hook commands in global or per-project settings.json whose referenced `.sh` script doesn't exist on disk after env-var expansion — catches stale paths left after refactors or env-var typos.",
+    "broken-hook-paths": "Hook commands in global or per-project settings.json — plus `md`/other task commands in `~/Taskfile.yml` and `~/SRC/*/Taskfile.yml` — whose referenced `.sh` script doesn't exist on disk after expansion. Catches stale paths left after a python-tui-lib rename (e.g. `md-to-pdf.sh` → `md-to-html.sh`) or env-var typos.",
     "hook-checksum-drift": "Entries in `~/.claude/hook-checksums.json` whose recorded sha256 no longer matches the live `~/SRC/python-tui-lib/hooks/*.sh` — a hook changed (uncommitted edit or a pull) without regenerating the manifest, so hook-runner.sh refuses to run it. Remediate via the runbook (audit diff → regen → verify).",
     "uncommitted":       "Modified or untracked Claude artifacts (skills, commands, memory, hooks, settings) sitting uncommitted in the homedir repo or any project repo — surfaces in-flight work that didn't get a commit.",
     "orphan-plans":      "Markdown files in `~/.claude/plans/` older than the threshold (default 1 day) that look like real plans worth routing.",
@@ -213,7 +213,54 @@ def _expand_hook_path(token: str, project: Optional["Project"] = None) -> Option
     s = os.path.expandvars(s)
     if "$" in s:
         return None  # unresolved — don't flag, we'd be guessing
-    return s
+    # Hook commands run with cwd = the project root (CLAUDE_PROJECT_DIR), so a
+    # relative script path is relative to that, not the scanner's cwd.
+    p = Path(s)
+    if not p.is_absolute() and project is not None:
+        p = Path(project.path) / p
+    return os.path.normpath(str(p))
+
+
+def _resolve_taskfile_ref(token: str, taskfile_dir: Path) -> Optional[str]:
+    """Resolve a `.sh` path token from a Taskfile `cmds:` entry to an absolute
+    path. Handles go-task's `{{.ROOT_DIR}}` (the Taskfile's own directory) and
+    relative paths (resolved against that directory). Returns None if the token
+    still contains an unresolved template (`{{...}}`) or env var after
+    expansion — same conservative stance as `_expand_hook_path`."""
+    s = token.replace("{{.ROOT_DIR}}", str(taskfile_dir))
+    s = os.path.expanduser(s)   # leading ~ → $HOME
+    s = os.path.expandvars(s)   # $HOME etc.
+    if "{{" in s or "$" in s:
+        return None  # unresolved template / runtime var ($PWD, …) — don't guess
+    p = Path(s)
+    if not p.is_absolute():
+        p = taskfile_dir / p
+    return os.path.normpath(str(p))  # lexical — the target may not exist
+
+
+def _suggest_renamed_script(missing_basename: str) -> Optional[str]:
+    """Fuzzy-match a missing `.sh` basename against the live python-tui-lib
+    `scripts/` + `hooks/` to suggest a rename (e.g. `md-to-pdf.sh` →
+    `md-to-html.sh`). Matches on shared leading `-`/`_`-delimited tokens; needs
+    at least one to avoid noise."""
+    ptl = HOME / "SRC" / "python-tui-lib"
+    cands: list[str] = []
+    for sub in ("scripts", "hooks"):
+        d = ptl / sub
+        if d.is_dir():
+            cands += [f.name for f in d.glob("*.sh")]
+    stem = re.split(r"[-_]", missing_basename.rsplit(".", 1)[0])
+    best, best_score = None, 0
+    for c in cands:
+        ctoks = re.split(r"[-_]", c.rsplit(".", 1)[0])
+        score = 0
+        for x, y in zip(stem, ctoks):
+            if x != y:
+                break
+            score += 1
+        if score > best_score:
+            best, best_score = c, score
+    return best if best_score >= 1 else None
 
 
 def sha256_of(path: Path) -> str:
@@ -1063,6 +1110,10 @@ def scan_broken_hook_paths(projects: list[Project]) -> list[Recommendation]:
                     for tok in re.findall(r"\S+\.sh", cmd):
                         if "/" not in tok:
                             continue  # bare arg name (e.g. hook-runner.sh's arg)
+                        # Skip regex/pattern fragments inside a quoted grep/test
+                        # (e.g. grep -qE "…/build\.sh$") — not an executed path.
+                        if tok[0] in "\"'" or "\\" in tok or ".+" in tok or ".*" in tok:
+                            continue
                         expanded = _expand_hook_path(tok, project)
                         if expanded is None:
                             continue  # unresolved var refs — skip
@@ -1078,6 +1129,50 @@ def scan_broken_hook_paths(projects: list[Project]) -> list[Recommendation]:
                             ),
                             severity="warn",
                         ))
+
+    # Taskfiles reference the same shared python-tui-lib scripts the same way
+    # (e.g. the `md` task → scripts/md-to-html.sh). A rename there leaves the
+    # `cmds:` entry dangling and `task <name>` fails with exit 127 — the same
+    # drift class, so fold it in. Covers ~/Taskfile.yml and ~/SRC/*/Taskfile.yml.
+    taskfiles: list[tuple[str, Path]] = []
+    if (HOME / "Taskfile.yml").is_file():
+        taskfiles.append(("~", HOME / "Taskfile.yml"))
+    for tf in sorted((HOME / "SRC").glob("*/Taskfile.yml")):
+        taskfiles.append((tf.parent.name, tf))
+
+    for scope_label, tf in taskfiles:
+        try:
+            lines = tf.read_text().splitlines()
+        except Exception:
+            continue
+        current_task = ""
+        for line in lines:
+            hdr = re.match(r"  ([A-Za-z0-9_:-]+):\s*$", line)
+            if hdr:
+                current_task = hdr.group(1)
+            # Only shared-library refs — `python-tui-lib/{scripts,hooks}/<x>.sh`.
+            # A bare `\S+\.sh` sweep of arbitrary Taskfile shell is hopelessly
+            # noisy (project-local scripts, remote /opt paths, quoted/var-prefixed
+            # fragments). This targeted pattern also can't capture a leading `"`,
+            # `(`, or `VAR=` because those chars aren't in the prefix class.
+            for m in re.finditer(r"[\w~$./{}-]*python-tui-lib/(?:scripts|hooks)/[\w.-]+\.sh", line):
+                tok = m.group(0)
+                resolved = _resolve_taskfile_ref(tok, tf.parent)
+                if resolved is None or Path(resolved).is_file():
+                    continue
+                name = Path(resolved).name
+                recs.append(Recommendation(
+                    category="broken-hook-paths",
+                    title=f"{scope_label}: Taskfile task `{current_task or '?'}` references missing `{name}`",
+                    details="",
+                    row=[scope_label, f"task: {current_task or '?'}", f"`{tok}`", f"`{resolved}`"],
+                    command_block=cmd_block_fix_broken_taskfile_ref(
+                        scope_label, tf, current_task, tok, resolved,
+                        _suggest_renamed_script(name),
+                    ),
+                    severity="warn",
+                ))
+
     return recs
 
 
@@ -1600,6 +1695,35 @@ cp -a '{settings_path}' "$BACKUP/settings.json"
 ${{EDITOR:-vi}} '{settings_path}'
 jq . '{settings_path}' >/dev/null && echo 'valid JSON'
 # Rollback: cp -a "$BACKUP/settings.json" '{settings_path}'"""
+
+
+def cmd_block_fix_broken_taskfile_ref(scope_label: str, taskfile: Path,
+                                      task: str, token: str, resolved: str,
+                                      suggestion: Optional[str]) -> str:
+    backup_tag = "global" if scope_label == "~" else scope_label
+    name = Path(resolved).name
+    if suggestion:
+        fix_hint = (
+            f"# Likely rename in python-tui-lib: `{name}` → `{suggestion}`. Repoint it:\n"
+            f"sed -i 's#{name}#{suggestion}#g' '{taskfile}'"
+        )
+    else:
+        fix_hint = (
+            f"# No close match for `{name}` in python-tui-lib/scripts|hooks.\n"
+            f"# Repoint the task to the current script, or delete the task:\n"
+            f"${{EDITOR:-vi}} '{taskfile}'"
+        )
+    return f"""# Broken script reference in {taskfile}
+# Task:      {task or '?'}
+# Token:     {token}
+# Resolves:  {resolved}   ← does not exist
+#
+BACKUP="$BACKUP_ROOT/broken-taskref-{backup_tag}"
+mkdir -p "$BACKUP"
+cp -a '{taskfile}' "$BACKUP/Taskfile.yml"
+{fix_hint}
+# Verify: task --taskfile '{taskfile}' --list >/dev/null
+# Rollback: cp -a "$BACKUP/Taskfile.yml" '{taskfile}'"""
 
 
 # ─── state visualization ───────────────────────────────────────────────

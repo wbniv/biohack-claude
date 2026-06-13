@@ -536,6 +536,21 @@ html[data-shrink="1"] .nav-link .logo { height: 22px; }
   color: var(--color-on-surface-muted);
   font-family: var(--font-body);
 }
+/* Changelog hover tooltip */
+.ver-wrap { position: relative; display: inline; }
+.ver-tip {
+  display: none; position: absolute; left: 0; top: calc(100% + 3px);
+  z-index: 100; min-width: 260px; max-width: 420px;
+  background: #1c1c1c; border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem; font-size: 0.72rem; line-height: 1.55;
+  color: var(--color-on-surface-muted); font-family: var(--font-mono);
+  white-space: pre-wrap; word-break: break-word; pointer-events: none;
+}
+.ver-wrap:hover .ver-tip { display: block; }
+/* Repology version badge */
+.repology-badge { display: block; margin-top: 4px; }
+.repology-badge img { vertical-align: middle; opacity: 0.8; }
+.repology-badge:hover img { opacity: 1; }
 .listing-table td.col-size {
   text-align: right;
   color: var(--color-on-surface);

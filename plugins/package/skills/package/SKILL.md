@@ -19,9 +19,9 @@ The skill takes a single argument in one of these forms (auto-detect by shape):
 | Shape | Example | Action |
 |---|---|---|
 | Bare name | `f9dasm`, `libvgm` | Search apt + GitHub; ask the user to confirm the upstream URL |
-| `github.com/...` URL | `https://github.com/Arakula/f9dasm` | `gh api` to find latest tag/release; download the archive tarball |
-| Tarball URL | `https://example.org/foo-1.2.3.tar.gz` | Download + sha256 pin |
-| `.dsc` URL | `https://deb.debian.org/.../foo_1.2.3-1.dsc` | `dget` to fetch the existing source package; re-pack with Foundry packaging revision |
+| `github.com/...` URL | `github.com/Arakula/f9dasm` | `gh api` to find latest tag/release; download the archive tarball |
+| Tarball URL | `example.org/foo-1.2.3.tar.gz` | Download + sha256 pin |
+| `.dsc` URL | `deb.debian.org/.../foo_1.2.3-1.dsc` | `dget` to fetch the existing source package; re-pack with Foundry packaging revision |
 | Local tree | `/path/to/foo` | Treat as orig tree (must contain `Makefile` or autotools/cmake/cargo); skill will tar it up as the orig tarball |
 
 Optional name/version overrides may follow as `key=value` tokens:
@@ -154,11 +154,79 @@ cp -a "$PKG_DIR/debian" "$SRC_DIR/"
 
 For `dpkg-buildpackage -b` (binary-only), no `.orig.tar.gz` is required even with `3.0 (quilt)` source format. Use `unzip` in Build-Depends. Note: the zip sha256 is from GitHub's release page (look in the release body — NSA/upstream often publishes it there), not from a separate `.sha256` file.
 
+> **Self-contained SDK keyed off an env var (devkitPro-style) — install to `/usr/lib/<name>` + `/etc/profile.d`, NOT `/usr/bin`.** Some pre-built upstreams (e.g. PVSnesLib) are whole toolchains whose internal build glue hard-references a root via an environment variable (`$PVSNESLIB_HOME/devkitsnes/bin/...`, `$DEVKITPRO/...`). The tools are never invoked from `$PATH` — the user writes a Makefile that `include`s the SDK's rules file and runs `make`. Package these by installing the entire tree under `/usr/lib/<name>/` and shipping `/etc/profile.d/<name>.sh` that `export`s the HOME var to that path (mode 0644). Do **not** symlink the SDK's binaries into `/usr/bin` — besides being unnecessary, an SDK often bundles its own pinned copy of a tool you already package standalone (PVSnesLib bundles `wla-65816`/`wla-spc700`/`wlalink` that would file-conflict with the `wla-dx` package). Keeping them under `/usr/lib/<name>/` means no conflict and no `Conflicts:` stanza. Bonus: nothing in `/usr/bin` ⇒ Policy §12.1 man-page mandate doesn't apply, so you skip writing man pages for a dozen internal tools.
+
+> **Multi-binary split for a large pre-built SDK (`<name>-core` / `<name>-examples` / `<name>` meta).** When a pre-built upstream bundles a heavy examples/assets tree (PVSnesLib ships 47 MB of `snes-examples` vs a ~15 MB devkit), split one source into three `Package:` stanzas: `<name>-core` (`Architecture: amd64` — the toolchain ELFs) carrying the env-var + profile.d; `<name>-examples` (`Architecture: all`, `Depends: <name>-core (>= ${source:Version})`) carrying just the sample tree; and `<name>` (`Architecture: all` metapackage) `Depends`ing on both. `override_dh_auto_install` populates `debian/<name>-core/...` and `debian/<name>-examples/...` as separate trees (run the +x permission dance over **both**). The `build.sh` then moves THREE artifacts into `dist/` — and note the arch in each filename differs: `<name>-core_<ver>_${ARCH}.deb` but `<name>-examples_<ver>_all.deb` and `<name>_<ver>_all.deb` (hardcode `_all` for the arch:all ones, don't use `$ARCH`). Wire the lean `-core` (not the meta) into umbrella metapackages so a general install doesn't drag in the examples. dpkg auto-generates a `-dbgsym` `.ddeb` from `dh_strip`; leave it in the workdir (don't move it to `dist/`).
+
 > **DEB_VERSION extraction — use `sed`, not `awk`.** The build template formerly used `awk 'NR==1 {match($0, /\(([^)]+)\)/, a); print a[1]}'` which requires gawk. Ubuntu containers ship mawk by default. Use:
 >
 > ```bash
 > DEB_VERSION=$(sed -n '1s/.*(\(.*\)).*/\1/p' "$PKG_DIR/debian/changelog")
 > ```
+
+**npm package upstream flow (pure-JavaScript CLI tools):** Some tools are distributed exclusively via the npm registry and have no pre-built standalone binary. This is the right approach for pure-JS tools (no native addons). The pattern:
+
+```bash
+# Pin the sha256:
+#   curl -fsSL https://registry.npmjs.org/@scope/pkg/-/pkg-X.Y.Z.tgz | sha256sum
+UPSTREAM_VERSION=X.Y.Z
+SHA256=<pinned>
+NPM_URL="https://registry.npmjs.org/@scope/pkg/-/pkg-${UPSTREAM_VERSION}.tgz"
+
+# npm tarballs ALWAYS extract to a top-level "package/" directory:
+curl -fsSL -o "$ORIG_TARBALL" "$NPM_URL"
+echo "$SHA256  $ORIG_TARBALL" | sha256sum -c -
+tar -xzf "$ORIG_TARBALL" -C "$WORKDIR"
+SRC_DIR="$WORKDIR/${NAME}-${UPSTREAM_VERSION}"
+mv "$WORKDIR/package" "$SRC_DIR"        # ← always "package/", not the pkg name
+
+# Install runtime deps (creates node_modules/):
+( cd "$SRC_DIR" && npm install --omit=dev --ignore-scripts --legacy-peer-deps 2>&1 )
+# --legacy-peer-deps: Ubuntu 26.04's npm 9.2.0 does strict peer-dep validation
+# even for devDeps you're omitting; this flag reverts to npm v6 behavior.
+# --ignore-scripts: skip lifecycle scripts (postinstall, etc.) for security.
+```
+
+Key `debian/control` fields for a pure-JS npm package:
+- `Build-Depends: debhelper-compat (= 13), nodejs, npm`
+- `Architecture: all` (no native code → one .deb for all arches)
+- `Depends: ${misc:Depends}, nodejs (>= 22)` — Ubuntu 26.04 ships nodejs 22.22.1 in universe
+
+Key `debian/rules` for an npm package:
+
+```makefile
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+override_dh_auto_build:
+    # node_modules/ already populated by npm install in build.sh
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -d $(CURDIR)/debian/<name>/usr/lib/<name>
+	install -d $(CURDIR)/debian/<name>/usr/bin
+	cp -r bin lib node_modules package.json $(CURDIR)/debian/<name>/usr/lib/<name>/
+	printf '#!/bin/sh\nexec /usr/bin/node /usr/lib/<name>/bin/<entry>.mjs "$$@"\n' \
+		> $(CURDIR)/debian/<name>/usr/bin/<name>
+	chmod 755 $(CURDIR)/debian/<name>/usr/bin/<name>
+
+override_dh_strip:
+    # Pure JavaScript — no ELF binaries to strip
+```
+
+Installation layout:
+- `/usr/lib/<name>/` — package files + node_modules (runtime module resolution works from here)
+- `/usr/bin/<name>` — wrapper shell script: `exec /usr/bin/node /usr/lib/<name>/bin/<entry>.mjs "$@"`
+
+The `Architecture: all` .deb filename is `<name>_<ver>_all.deb` — hardcode `_all` in `build.sh`'s DEB path (not `dpkg --print-architecture` which returns the host arch).
+
+**Smoke test caveat:** Ubuntu's Docker image disables man page extraction via `/etc/dpkg/dpkg.cfg.d/excludes` (`path-exclude=/usr/share/man/*`). `dpkg -L <pkg>` will list the man page as installed, but `ls /usr/share/man/` won't show it. Verify with `dpkg -L` + `dpkg-deb -c`, not with `ls` after install.
+
+**npm install creates empty scope dirs:** `@esbuild/`, `@rollup/`, etc. may appear as empty directories in `node_modules/` after install — these are scope-dir artifacts from Ubuntu's system npm package and contain no files. Harmless; lintian ignores empty dirs.
 
 ---
 
@@ -197,7 +265,7 @@ DEBEMAIL="packages@<repo-domain>" DEBFULLNAME="Foundry Linux" \
    - **ISC / 0BSD / MIT-no-attribution:** `dh_make --copyright` doesn't accept `isc`. Use `--copyright bsd` to get a BSD-2-clause stub, then hand-rewrite `debian/copyright` with the actual ISC text. Name the block `License: ISC-<pkgname>` (not `BSD-2-Clause`) so it's unambiguous.
 
 3. **`debian/changelog`** — replace with `<TEMPLATES>/changelog`:
-   - Single initial entry, target distribution = the **codename of the repo's suite** (look up at `apt/public/dists/*/Release` → `Codename:` field). For the foundry-style apt repo this is `stable` (Suite + Codename both = `stable`), not the Debian/Ubuntu release name. **Don't put `bookworm`/`noble`/`questing` in the changelog distribution field** — aptly republishes under the repo's own codename regardless, and a mismatch is misleading. Confirmed by inspecting `apt/public/dists/<codename>/Release` after the first publish.
+   - Single initial entry, target distribution = the **codename of the repo's suite** (look up at `apt/public/dists/*/Release` → `Codename:` field). For `apt.foundrylinux.org` this is `resolute` — confirmed by inspecting existing package changelogs (f9dasm, vgmstream, foundry-retro-tools all use `resolute`). **Don't put `bookworm`/`noble`/`questing`/`stable` in the changelog distribution field** — aptly republishes under the repo's own codename regardless, and a mismatch is misleading.
    - Version = `<UPSTREAM>-<REVISION>` (e.g. `2.4.1-1foundry1`)
    - Author/date from `DEBEMAIL`/`DEBFULLNAME` + `date -R`
    - **Debian version must start with a digit.** If the upstream tag has a non-numeric prefix (e.g. `r2083`, `v1.2.3`), strip it: `r2083` → `2083`, `v1.2.3` → `1.2.3`. A version like `r2083-1foundry1` will fail `dpkg-buildpackage` with "version number does not start with digit". The `debian/watch` regex should capture only the numeric portion as the version.
@@ -205,12 +273,55 @@ DEBEMAIL="packages@<repo-domain>" DEBFULLNAME="Foundry Linux" \
 4. **`debian/rules`** — use the right template for the upstream type:
    - **Source-compiled upstream (Makefile/autotools/cmake):** start from `templates/rules`. Typically `dh $@` is sufficient; add override targets only for quirks.
    - **Pre-built binary upstream (zip/tarball, no compile):** start from `templates/rules-prebuilt.mk`. See the pre-built section below for the full pattern.
+   - **Python package upstream:** see the **Python packages** section below.
    - Common source-build overrides:
      - Source build root is not the package root → `override_dh_auto_build: dh_auto_build -- -C <subdir>`
      - Tests must be skipped → `override_dh_auto_test:` (empty body)
      - Custom install path → `override_dh_auto_install: make install DESTDIR=$(CURDIR)/debian/<NAME> prefix=/usr`
    - **Do NOT** add manual `strip` calls — `dh_strip` runs automatically.
    - **Do NOT** disable `dh_strip` unless the user explicitly wants debug symbols shipped.
+
+   **Python packages (setuptools / hatchling / other pyproject.toml backends):**
+
+   Always use `--buildsystem=pybuild` — never just `--with python3` bare. In debhelper compat 13, `dh_auto_clean` refuses to run `python setup.py clean` and exits with "This feature was removed in compat 12." The pybuild buildsystem handles clean, build, install, and test correctly for all Python build backends.
+
+   ```makefile
+   export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+   export PYBUILD_NAME = <pypi-import-name>   # e.g. "glfw", "mss", "librosa"
+
+   %:
+       dh $@ --with python3 --buildsystem=pybuild
+
+   override_dh_auto_test:
+       # skip — tests require display, network, or optional deps not in Build-Depends
+   ```
+
+   `PYBUILD_NAME` must match the Python import name (what you'd `import` in Python), not the PyPI package name — they differ when the PyPI name has hyphens (e.g. PyPI `my-pkg` → `PYBUILD_NAME = my_pkg`).
+
+   **Build-Depends by backend:**
+
+   | Build backend | Additional Build-Depends |
+   |---|---|
+   | `setuptools` (`setup.py` or `pyproject.toml` + `setuptools`) | `dh-python python3-all python3-setuptools` |
+   | `hatchling` | `dh-python python3-all pybuild-plugin-pyproject python3-hatchling` |
+   | `flit` | `dh-python python3-all pybuild-plugin-pyproject python3-flit-core` |
+   | `poetry` | `dh-python python3-all pybuild-plugin-pyproject python3-poetry-core` |
+
+   Check `pyproject.toml → [build-system] → requires` and `build-backend` to identify which backend applies. All of these are in Ubuntu 26.04 universe.
+
+   **Python 3.13+ audioop removal:** `audioop` was removed from the Python stdlib in Python 3.13. Ubuntu 26.04 ships Python 3.14, so any package that does `import audioop` will fail. The fix is `python3-audioop-lts` (in Ubuntu universe at 0.2.2-2), which reinstates the `audioop` module. Add it to `Depends:` for any audio-manipulation package that uses audioop (check `grep -r audioop` in the source). Note: `pyaudioop` (the other common fallback name) does **not** exist on PyPI — `audioop-lts` is the correct package.
+
+   **PyPI wheel binary extraction (pre-built Rust/native CLIs):** When packaging a tool like `ruff` that distributes a pre-built native binary inside a Python wheel, the binary lives at:
+   ```
+   <pkgname>-<version>.data/scripts/<binary>
+   ```
+   inside the wheel zip (not `<pkgname>/bin/<binary>` as sometimes assumed). Unzip the wheel flat into the source directory, then install the binary in `override_dh_auto_install`:
+   ```makefile
+   UPSTREAM = X.Y.Z
+   override_dh_auto_install:
+       install -D -m 0755 <pkgname>-$(UPSTREAM).data/scripts/<binary> \
+           $(CURDIR)/debian/<pkg>/usr/bin/<binary>
+   ```
 
    **cmake upstreams with a legacy Makefile or configure.ac alongside CMakeLists.txt:** debhelper may not auto-detect cmake if the source also contains `Makefile` or `configure.ac`. Specify `--buildsystem=cmake` explicitly on BOTH the configure AND build override targets, and add an empty `override_dh_autoreconf:` to skip the autotools regeneration step (autoreconf will likely fail if the `configure.ac` was written for an old autoconf):
 
@@ -296,7 +407,7 @@ DEBEMAIL="packages@<repo-domain>" DEBFULLNAME="Foundry Linux" \
     <UPSTREAM_DOWNLOAD_PAGE_REGEX>
     ```
 
-   For GitHub with standard `v`-prefixed tags: `https://github.com/<owner>/<repo>/tags .*archive/refs/tags/v?@ANY_VERSION@\.tar\.gz`.
+   For GitHub with standard `v`-prefixed tags: `github.com/<owner>/<repo>/tags .*archive/refs/tags/v?@ANY_VERSION@\.tar\.gz` (prefix with `https://` in the actual `debian/watch`).
 
    For non-standard prefixes (e.g. `r<number>`): write a custom pattern — e.g. for vgmstream:
    ```
@@ -541,6 +652,51 @@ docker run --rm ubuntu:<LTS> bash -c "
 
 ---
 
+## Step 7 — Upstream the patches (LAST step — don't skip)
+
+If `debian/patches/` ended up non-empty, **every patch that is a genuine portability/build fix — not Debian packaging glue — should be offered back upstream.** A patch we carry forever is a maintenance tax and a smell; a patch upstream accepts disappears from our tree on the next release. This is the difference between *vendoring* a project and *forking* it.
+
+**Triage each patch in `debian/patches/series` into one of two buckets:**
+
+| Bucket | Examples | Action |
+|---|---|---|
+| **Upstreamable** (a real bug/portability fix that helps everyone) | missing `#include` the compiler now requires (`<cstring>`, `<cstdint>`, `<FL/platform.H>`); a missing link library (`-lz`/`-lpng`) the build needs on a stricter linker; a `-Werror` trip from a newer toolchain; a hard-coded path that breaks off-Windows | **Send upstream** (below). Keep carrying it in `debian/patches/` until a release includes it, then drop it. |
+| **Debian-only** (meaningless or wrong upstream) | rewriting an install path to `$(DESTDIR)/usr`; forcing system libs over a vendored copy *because Debian policy wants system libs*; disabling a vendored-dependency download; `.desktop`/manpage we authored | **Keep**, do not send. Add a one-line comment in the patch header: `# Debian-specific; not for upstream.` |
+
+**How to send an upstreamable patch:**
+
+1. **Give every quilt patch a DEP-3 header** (it doubles as the PR description). This is required for upstreamable patches and good practice for all of them:
+
+   ```
+   Description: add missing <cstring> include for GCC 15 / FLTK 1.4.5
+    preferences.cpp uses strcpy/strncpy/strrchr but relied on a transitive
+    include that FLTK 1.4.5's cleaned-up headers no longer provide.
+   Author: Foundry Linux <packages@foundrylinux.org>
+   Forwarded: https://github.com/<owner>/<repo>/pull/<n>   # fill in once opened
+   Last-Update: <YYYY-MM-DD>
+   ```
+
+   Until the PR exists, use `Forwarded: not-yet` (or `Forwarded: no` for a Debian-only patch).
+
+2. **Open the PR with `gh`** from a clean upstream checkout (NOT the packaging tree). The combined patch in `debian/patches/` is your diff; apply it to a fresh clone, branch, commit with a clear message, push to a fork, and `gh pr create`:
+
+   ```bash
+   gh repo fork <owner>/<repo> --clone --remote
+   cd <repo> && git checkout -b fix-<short-desc>
+   # apply the upstreamable hunks (quilt push, or git apply the specific patch)
+   git commit -am "fix: <what and why — newer toolchain/linker needs this>"
+   git push -u origin fix-<short-desc>
+   gh pr create --title "..." --body "<the DEP-3 Description, expanded; note the build env: Ubuntu 26.04, GCC 15, FLTK 1.4.5>"
+   ```
+
+3. **Record the PR URL** back in the patch's `Forwarded:` header and in the package's `debian/changelog` entry, so the next packager knows it's in flight and can drop the patch once a release ships the fix.
+
+4. If you **can't** open the PR in this run (no auth, upstream archived, user not ready), don't silently skip — **tell the user** which patches are upstreamable, paste the ready-to-send `gh` commands, and leave `Forwarded: not-yet` in the headers so it's tracked.
+
+Don't upstream: our `.desktop` file, our man pages, `debian/`-tree anything, or version pins — those are ours.
+
+---
+
 ## Verification checklist
 
 Before reporting the skill output as done:
@@ -551,6 +707,7 @@ Before reporting the skill output as done:
 - [ ] Step 4: `file usr/bin/<binary>` reports "stripped"; `dpkg-deb -I` shows resolved `${shlibs:Depends}` with version constraints; **`lintian` returns clean — zero E: lines AND zero W: lines** (the only line allowed is the root-privileges advisory). If a warning is irreducible, it's recorded in `debian/<pkg>.lintian-overrides` with a one-line justification.
 - [ ] Step 5: foundry-apt build-all.sh still works end-to-end with the new layout.
 - [ ] Step 6: live `apt install <name>` works in a fresh container.
+- [ ] Step 7: every patch in `debian/patches/` has a DEP-3 header; each is triaged upstreamable-vs-Debian-only; upstreamable ones are sent (PR URL in `Forwarded:`) or the user is told with ready-to-run `gh` commands.
 
 ---
 

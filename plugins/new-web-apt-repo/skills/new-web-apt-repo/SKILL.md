@@ -1,7 +1,7 @@
 ---
 name: new-web-apt-repo
 description: Provision a new web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.
-version: 1.0.0
+version: 1.1.0
 ---
 
 Provision a new web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.
@@ -11,7 +11,7 @@ Usage: `/new-web-apt-repo [gh-org/repo zone-name [subdomain [key-email [suite]]]
 Examples:
 - `/new-web-apt-repo worldfoundry/worldfoundry-apt worldfoundry.org apt packages@worldfoundry.org stable`
 - `/new-web-apt-repo myCo/myco-apt myco.org` — subdomain defaults to `apt`, email to `packages@<zone>`, suite to `stable`
-- `/new-web-apt-repo` — reads config from existing `scripts/bootstrap-apt.sh` in cwd
+- `/new-web-apt-repo` — auto-detect: if `scripts/bootstrap-apt.sh` exists in cwd, read its config block and ask the user to confirm/edit the values before continuing; otherwise prompt for `gh-org/repo`, `zone-name`, etc.
 
 ## Step 0 — Derive config and instantiate templates
 
@@ -103,8 +103,16 @@ WORDMARK, HOME_URL, INSTALL_SLUG (e.g. `indri`), CONTACT_EMAIL, and the lede
 copy. Do this BEFORE running bootstrap so the fingerprint patching takes
 effect on the first run.
 
-If no arguments were provided, check for an existing `scripts/bootstrap-apt.sh` — read its
-config block, confirm values with the user, and skip template instantiation.
+If no arguments were provided, auto-detect:
+
+- **If `scripts/bootstrap-apt.sh` exists in cwd:** read its config block, show the values
+  back to the user, and ask "Reuse these, edit, or start fresh?" Skip template instantiation
+  on reuse; treat "fresh" as if the user invoked with no existing script.
+- **If `scripts/bootstrap-apt.sh` does NOT exist:** ask the user for `gh-org/repo`, `zone-name`,
+  and optional `subdomain` / `key-email` / `suite`, then proceed as if those had been
+  passed as `$ARGUMENTS`.
+
+Never silently default to "reuse" without surfacing the values for confirmation.
 
 ## Step 1 — Preflight
 
@@ -289,6 +297,125 @@ clickable `Depends:` / `Recommends:` lists. Same-repo deps link to their `.deb` 
 this pool; external deps link to `packages.ubuntu.com/<UPSTREAM_UBUNTU_SUITE>/<pkg>`
 (default: `resolute`; configurable in `gen/config.py`). Keyboard-accessible via Tab +
 Enter/Space; the row gets `role="button"` + `aria-expanded` tracking automatically.
+
+### OpenGraph meta tags
+
+`render_page()` emits `og:type`, `og:url`, `og:title`, `og:description`, and
+`twitter:card:summary` on every generated page. No `og:image` — add a static
+`public/og-image.png` and a `<meta property="og:image">` line in `render_page()`
+if you want rich image previews.
+
+### Repology badges
+
+Add a `REPOLOGY_PROJECTS` dict to `gen/config.py`:
+
+```python
+REPOLOGY_PROJECTS = {
+    "ghidra":    "ghidra",
+    "f9dasm":    "f9dasm",
+    "libvgm":    "libvgm",
+    "vgmstream": "vgmstream",
+}
+```
+
+Packages listed here get a live SVG badge below their description linking to
+`https://repology.org/project/<name>/versions`. The badge images are loaded at
+page-render time from repology.org (no build-time fetch). Only appears on `.deb`
+file entries, not directories or metapackages.
+
+### Changelog hover tooltip
+
+Add a `CHANGELOG_ENTRIES` dict to `gen/config.py`:
+
+```python
+CHANGELOG_ENTRIES = {
+    "ghidra": "* Initial Foundry Linux packaging of Ghidra 12.1 (2026-05-13 release).\n* Pre-built upstream zip; native decompiler is upstream's Linux x86_64 binary.",
+}
+```
+
+The value is the bullet-point body of the first `debian/changelog` stanza (no
+header line, no ` -- ` footer). Shows as a CSS hover tooltip (`.ver-wrap`/`.ver-tip`)
+on the package's description cell. Populate by copying the changelog text and
+updating on each package version bump.
+
+### Metapackage expansion
+
+Already in the template — no config needed. Packages declaring `Section: metapackages`
+in their `debian/control` automatically get:
+- A `META` chip in the Arch column
+- An "Install this — umbrella metapackages" section header separating them from leaf packages
+- A hidden-by-default details row (toggled by clicking the row) showing the long
+  Description body and clickable `Depends`/`Recommends` chips (same-repo packages link
+  to their `.deb`; external packages link to `packages.ubuntu.com`)
+
+### packages.json machine-readable index
+
+Built-in — generated automatically on every publish run alongside `index.html`. No config needed. Structure:
+
+```json
+{
+  "generated": "2026-05-29T00:00:00Z",
+  "suite": "stable",
+  "count": 32,
+  "packages": [
+    {
+      "name": "vgmstream",
+      "version": "2083-1foundry5",
+      "architecture": "amd64",
+      "section": "sound",
+      "description_short": "Video-game audio decoder (CLI)",
+      "description_long": "...",
+      "depends": [],
+      "deb_url": "/pool/main/v/vgmstream/vgmstream_2083-1foundry5_amd64.deb"
+    },
+    ...
+  ]
+}
+```
+
+Fields come from the published `Packages` files — same source as `index.html`. The `suite` field reflects `cfg.DEFAULT_SUITE`.
+
+### feed.xml RSS 2.0
+
+Built-in — generated automatically alongside `index.html` and `packages.json`. No config needed. One `<item>` per package, keyed by `name@version` as the `<guid>`. `<pubDate>` is the `.deb` file's mtime. `<description>` includes the short description and, if the package appears in `CHANGELOG_ENTRIES`, the latest changelog stanza.
+
+A `<link rel="alternate" type="application/rss+xml">` auto-discovery tag is emitted in every page's `<head>`.
+
+### CVE shield links
+
+For packages with a known upstream project (i.e., those listed in `REPOLOGY_PROJECTS`), render a shield icon linking to `https://ubuntu.com/security/cves?package={name}`. Add to `render_row()` alongside the Repology badge:
+
+```python
+if not e.is_dir and repology_map and repology_map.get(pkg_name):
+    shield_svg = ('<svg viewBox="0 0 16 16" width="12" height="12" fill="none" '
+                  'stroke="currentColor" stroke-width="1.4" stroke-linecap="round" '
+                  'stroke-linejoin="round"><path d="M8 2 L13 4 L13 8.5 '
+                  'C13 11.5 8 14 8 14 C8 14 3 11.5 3 8.5 L3 4 Z"/></svg>')
+    cve_url = f"https://ubuntu.com/security/cves?package={esc(pkg_name)}"
+    cve_link = (f'<a class="cve-link" href="{cve_url}" target="_blank" rel="noopener" '
+                f'aria-label="CVE tracker" title="Ubuntu CVE tracker">{shield_svg}</a>')
+    # insert into col-name or col-desc as appropriate
+```
+
+The CVE link is passive — no build-time fetch, no count display. It surfaces for vendored/source-built packages that have an upstream identity and thus a meaningful CVE surface. Ubuntu-origin packages (pulled straight from universe/main) don't need the link since they're managed by the Ubuntu security team already.
+
+The generated `public/index.html` ships with `gen/static/index.js` (copied to the
+repo root on every publish). The JS file is progressively enhanced — the page is
+fully usable without it. It layers on:
+- **Client-side filter** — `<input id="filter-q">` above the table; filters rows live
+  by name or description, updates the package count display. Each `<tr>` carries
+  `data-name` and `data-desc` attributes for the comparator.
+- **Sortable columns** — clicking any `<th data-sort="name|ver|desc">` header sorts
+  the tbody rows in place; clicking again reverses direction; a `▲`/`▼`/`↕` indicator
+  tracks state. Sort is a stable string comparison on the matching `data-*` attribute.
+- **Copy-to-clipboard** — any `<button data-copy="<id>">` copies the `textContent` of
+  `document.getElementById(<id>)`. Wired to the quick-install `<pre id="quick-install">`
+  block by default. Falls back to `execCommand("copy")` on older browsers.
+
+When bootstrapping a new repo via this skill, `gen/static/index.js` is seeded from
+`foundry-apt/gen/static/index.js` (the canonical source). If the new repo has
+project-specific columns or sort keys, update the `bindSort()` `data-*` attributes in
+both the HTML template and `index.js` to match.
 
 ### Builder image (`Dockerfile` + `scripts/in-docker.sh`)
 

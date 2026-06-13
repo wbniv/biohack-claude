@@ -1,7 +1,7 @@
 ---
 name: claude-housekeeping
 description: Scan all Claude Code project artifacts (memories, hooks, commands, plans, settings) across global ~/.claude and every project in ~/.claude/projects.json. Produce a numbered list of drift recommendations plus an executable command list, state-visualization table, and mermaid graphs. Never auto-applies — user must approve recommendations explicitly. Use when the user says "housekeeping", "/claude-housekeeping", "audit my claude config", "find drift", or wants a daily/weekly snapshot of their Claude setup health.
-version: 1.3.0
+version: 1.4.1
 ---
 
 # Housekeeping
@@ -123,6 +123,9 @@ When invoked as `/claude-housekeeping --report-only --auto-reschedule` (i.e., fi
 
 9. **Installed skill ≠ git source** — a skill under `~/.claude/skills/` that differs from its git-tracked plugin source under `~/SRC/biohack-claude/plugins/*/skills/`. The live copy was edited in place, or the published plugin is a stale snapshot — the two rot apart.
    - Recommend: pick the canonical side (usually the live, more-evolved copy), sync the other, and commit the source.
+
+10. **Broken shared-library references** — a `python-tui-lib/scripts/` or `/hooks/` `.sh` referenced from a `settings.json` hook command (global + per-project) **or** a `cmds:` entry in `~/Taskfile.yml` / `~/SRC/*/Taskfile.yml`, that no longer exists on disk. Catches drift after a shared script is renamed/removed without updating its callers — e.g. `md-to-pdf.sh` → `md-to-html.sh` leaving `task md` dead with `exit 127`. Scoped to `python-tui-lib/{scripts,hooks}/` paths (resolving `{{.ROOT_DIR}}` / relative / `~` / `$VAR` forms) so it stays quiet on project-local scripts and remote `/opt/…` references.
+    - Recommend: repoint the caller at the current file — the scan fuzzy-matches the missing basename against the live `python-tui-lib` listing to suggest the rename (e.g. `md-to-pdf.sh` → `md-to-html.sh`) — or delete the dead caller. Manifest-routed hooks then need `hook-checksums.json` regenerated.
 
 ## Report file format
 

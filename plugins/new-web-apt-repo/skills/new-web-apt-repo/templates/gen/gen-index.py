@@ -562,7 +562,9 @@ def name_with_wbr(name: str) -> str:
     return re.sub(r'([-_.+])', r'\1<wbr>', escaped)
 
 
-def render_row(e: Entry, rel: str, show_arch: bool, show_hash: bool) -> str:
+def render_row(e: Entry, rel: str, show_arch: bool, show_hash: bool,
+               repology_map: Optional[dict] = None,
+               changelog_map: Optional[dict] = None) -> str:
     href = esc(e.href if e.href is not None else (e.name + ("/" if e.is_dir else "")))
     icon = ICONS["dir"] if e.is_dir else ICONS.get(e.ext, ICONS["txt"])
     cls = "entry " + ("dir" if e.is_dir else "file")
@@ -603,8 +605,8 @@ def render_row(e: Entry, rel: str, show_arch: bool, show_hash: bool) -> str:
     meta_attrs = ""
     meta_cls = ""
     desc_cell_content = esc(e.desc)
+    pkg_name = e.name.split("_", 1)[0] if "_" in e.name else e.name
     if e.is_metapackage:
-        pkg_name = e.name.split("_", 1)[0] if "_" in e.name else e.name
         meta_attrs = f' data-meta-pkg="{esc(pkg_name)}"'
         meta_cls = " meta-row"
         # Inline preview of Depends + Recommends in the Description cell so
@@ -618,6 +620,25 @@ def render_row(e: Entry, rel: str, show_arch: bool, show_hash: bool) -> str:
             bits.append(f'<span class="desc-recommends"><span class="desc-deps-label">Recommends:</span> {esc(", ".join(e.recommends))}</span>')
         if bits:
             desc_cell_content = f'{esc(e.desc)}<br>{" ".join(bits)}'
+    # Changelog hover tooltip
+    if not e.is_dir and changelog_map:
+        cl = (changelog_map or {}).get(pkg_name, "")
+        if cl:
+            desc_cell_content = (
+                f'<span class="ver-wrap">{desc_cell_content}'
+                f'<span class="ver-tip">{esc(cl)}</span></span>'
+            )
+    # Repology badge for vendored/source-built packages
+    if not e.is_dir and e.ext == "deb" and repology_map:
+        rp = (repology_map or {}).get(pkg_name, "")
+        if rp:
+            badge_url  = f"https://repology.org/badge/latest-versions/{esc(rp)}.svg"
+            badge_href = f"https://repology.org/project/{esc(rp)}/versions"
+            desc_cell_content += (
+                f'<a class="repology-badge" href="{badge_href}" target="_blank"'
+                f' rel="noopener" aria-label="Repology versions">'
+                f'<img src="{badge_url}" alt="latest versions" height="14"></a>'
+            )
     return (
         f'<tr class="entry-row{meta_cls}" data-name="{esc(e.name.lower())}" data-size="{sort_size}" data-mtime="{e.mtime:.0f}" data-is-dir="{int(e.is_dir)}" data-desc="{esc(e.desc.lower())}"{meta_attrs}>'
         f'<td class="col-name">{name_html}</td>'
@@ -704,7 +725,9 @@ def render_meta_details_row(e: Entry, n_cols: int, section_map: dict[str, str],
 def render_table(rel: str, entries: list[Entry], show_arch: bool, show_hash: bool,
                  section_map: Optional[dict[str, str]] = None,
                  pkg_meta: Optional[dict[str, dict]] = None,
-                 ubuntu_suite: str = "resolute") -> str:
+                 ubuntu_suite: str = "resolute",
+                 repology_map: Optional[dict] = None,
+                 changelog_map: Optional[dict] = None) -> str:
     parent = parent_of(rel)
     ndirs = sum(1 for e in entries if e.is_dir)
     nfiles = sum(1 for e in entries if not e.is_dir)
@@ -733,10 +756,12 @@ def render_table(rel: str, entries: list[Entry], show_arch: bool, show_hash: boo
     n_cols = 4 + (1 if show_arch else 0) + (1 if show_hash else 0)  # name + mod + size + desc + optional arch/hash
     sm = section_map or {}
     pm = pkg_meta or {}
+    rm = repology_map or {}
+    cm = changelog_map or {}
+
     def meta_row(e: Entry) -> str:
-        # Standard row followed by the hidden expandable details row.
         return (
-            render_row(e, rel, show_arch, show_hash)
+            render_row(e, rel, show_arch, show_hash, rm, cm)
             + render_meta_details_row(e, n_cols, sm, pm, rel, ubuntu_suite)
         )
     if metas and leaves:
@@ -745,12 +770,12 @@ def render_table(rel: str, entries: list[Entry], show_arch: bool, show_hash: boo
             + render_section_header_row("Install this — umbrella metapackages", n_cols)
             + "".join(meta_row(e) for e in metas)
             + render_section_header_row("Constituent packages", n_cols)
-            + "".join(render_row(e, rel, show_arch, show_hash) for e in leaves)
+            + "".join(render_row(e, rel, show_arch, show_hash, rm, cm) for e in leaves)
         )
     elif metas:
         rows = parent_row + "".join(meta_row(e) for e in metas)
     else:
-        rows = parent_row + "".join(render_row(e, rel, show_arch, show_hash) for e in entries)
+        rows = parent_row + "".join(render_row(e, rel, show_arch, show_hash, rm, cm) for e in entries)
     return (
         f'<div class="listing-wrap">'
         f'<div class="listing-bar">'
@@ -815,7 +840,9 @@ def render_footer(cfg, total_bytes_label: str) -> str:
 
 def render_page(rel: str, entries: list[Entry], cfg, do_sha256: bool, total_label: str,
                 section_map: Optional[dict[str, str]] = None,
-                pkg_meta: Optional[dict[str, dict]] = None) -> str:
+                pkg_meta: Optional[dict[str, dict]] = None,
+                repology_map: Optional[dict] = None,
+                changelog_map: Optional[dict] = None) -> str:
     is_root = rel == "/"
     depth = len(segments_of(rel))
     rel_prefix = "../" * depth  # "" at root, "../" at /dists/, "../../" at /dists/stable/, ...
@@ -831,10 +858,16 @@ def render_page(rel: str, entries: list[Entry], cfg, do_sha256: bool, total_labe
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(title)}</title>
 <meta name="description" content="{esc(cfg.PAGE_DESCRIPTION)}">
+<meta property="og:type"        content="website">
+<meta property="og:url"         content="{esc(cfg.SCHEME)}://{esc(cfg.HOST)}{esc(rel)}">
+<meta property="og:title"       content="{esc(title)}">
+<meta property="og:description" content="{esc(cfg.PAGE_DESCRIPTION)}">
+<meta name="twitter:card"       content="summary">
 <meta name="color-scheme" content="dark">
 <link rel="icon" type="image/svg+xml" href="{rel_prefix}favicon.svg">
 <link rel="apple-touch-icon" href="{rel_prefix}apple-touch-icon.png">
 <link rel="manifest" href="{rel_prefix}site.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="{esc(getattr(cfg, 'WORDMARK', cfg.HOST))} APT" href="/feed.xml">
 <meta name="theme-color" content="#888888">
 <!-- Theme tokens live in styles.css (:root). Edit there to recolour. -->
 <style>html,body{{background:#111;color:#e8e8e8;margin:0}}</style>
@@ -861,7 +894,7 @@ def render_page(rel: str, entries: list[Entry], cfg, do_sha256: bool, total_labe
   {setup}
   {render_crumbs(rel, cfg)}
   {render_filter()}
-  {render_table(rel, entries, show_arch=cfg.SHOW_ARCH, show_hash=do_sha256, section_map=section_map, pkg_meta=pkg_meta, ubuntu_suite=getattr(cfg, "UPSTREAM_UBUNTU_SUITE", "resolute"))}
+  {render_table(rel, entries, show_arch=cfg.SHOW_ARCH, show_hash=do_sha256, section_map=section_map, pkg_meta=pkg_meta, ubuntu_suite=getattr(cfg, "UPSTREAM_UBUNTU_SUITE", "resolute"), repology_map=repology_map, changelog_map=changelog_map)}
   {readme}
   {render_footer(cfg, total_label)}
 </main>
@@ -942,13 +975,16 @@ def main(argv: list[str]) -> int:
     pool_component_re = re.compile(r"^/pool/[^/]+/$")
     # Section: <foo> per package name, used to surface metapackages
     # ("Section: metapackages") with a META chip + sectioned table layout.
-    # Only loaded when we'll actually use it (flat mode).
-    pkg_meta = load_package_metadata(args.root) if flat_pool_mode else {}
+    # Always loaded — also powers packages.json / feed.xml generation.
+    pkg_meta = load_package_metadata(args.root)
     section_map = {k: v["section"] for k, v in pkg_meta.items()}
     if flat_pool_mode:
         n_meta = sum(1 for s in section_map.values() if s == "metapackages")
         logger.info("section map: %d total packages; %d metapackages",
                     len(section_map), n_meta)
+
+    repology_map  = getattr(cfg, "REPOLOGY_PROJECTS",  {}) or {}
+    changelog_map = getattr(cfg, "CHANGELOG_ENTRIES",  {}) or {}
 
     n = 0
     for rel in walk_rel(args.root):
@@ -958,7 +994,8 @@ def main(argv: list[str]) -> int:
         else:
             entries = scan(args.root, rel, descriptions, args.sha256, cache, logger)
         html = render_page(rel, entries, cfg, args.sha256, total_label,
-                           section_map=section_map, pkg_meta=pkg_meta)
+                           section_map=section_map, pkg_meta=pkg_meta,
+                           repology_map=repology_map, changelog_map=changelog_map)
         out_path = args.out / rel.strip("/") / "index.html" if rel != "/" else args.out / "index.html"
         if args.dry_run:
             logger.info("would write %s (%d entries)", out_path, len(entries))
@@ -971,6 +1008,78 @@ def main(argv: list[str]) -> int:
     if cache:
         cache.save()
     logger.info("done — %d index.html files", n)
+
+    # packages.json — machine-readable package index
+    # feed.xml — RSS 2.0 feed (one item per package, pubDate from .deb mtime)
+    if not args.dry_run and pkg_meta:
+        from email.utils import formatdate as _rfc2822
+        generated_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        site_url = f"{cfg.SCHEME}://{cfg.HOST}"
+        suite = getattr(cfg, "DEFAULT_SUITE", "stable")
+        wordmark = getattr(cfg, "WORDMARK", cfg.HOST)
+
+        pkg_list = []
+        for pkg_name in sorted(pkg_meta.keys()):
+            m_data = pkg_meta[pkg_name]
+            fname = m_data.get("filename", "")
+            basename = fname.rsplit("/", 1)[-1] if "/" in fname else fname
+            deb_m = DEB_RE.match(basename)
+            pkg_list.append({
+                "name":             pkg_name,
+                "version":          deb_m.group("ver")  if deb_m else "",
+                "architecture":     deb_m.group("arch") if deb_m else "",
+                "section":          m_data.get("section", ""),
+                "description_short": m_data.get("description_short", ""),
+                "description_long": m_data.get("description_long", ""),
+                "depends":          m_data.get("depends", []),
+                "deb_url":          "/" + fname if fname else "",
+            })
+
+        (args.out / "packages.json").write_text(
+            json.dumps({"generated": generated_iso, "suite": suite,
+                        "count": len(pkg_list), "packages": pkg_list}, indent=2)
+        )
+        logger.info("wrote packages.json (%d packages)", len(pkg_list))
+
+        items: list[str] = []
+        for p in pkg_list:
+            link = site_url + (p["deb_url"] or "/")
+            cl = (changelog_map or {}).get(p["name"], "")
+            desc_parts = [esc(p.get("description_short", ""))]
+            if cl:
+                desc_parts.append(esc(cl))
+            pub_date = _rfc2822(usegmt=True)
+            if p["deb_url"]:
+                try:
+                    pub_date = _rfc2822((args.root / p["deb_url"].lstrip("/")).stat().st_mtime, usegmt=True)
+                except OSError:
+                    pass
+            items.append(
+                f"    <item>\n"
+                f"      <title>{esc(p['name'] + ' ' + p['version'])}</title>\n"
+                f"      <link>{esc(link)}</link>\n"
+                f"      <guid isPermaLink=\"false\">{esc(p['name'] + '@' + p['version'])}</guid>\n"
+                f"      <pubDate>{pub_date}</pubDate>\n"
+                f"      <description>{' — '.join(desc_parts)}</description>\n"
+                f"    </item>"
+            )
+
+        feed = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+            '  <channel>\n'
+            f'    <title>{esc(wordmark + " APT Repository")}</title>\n'
+            f'    <link>{esc(site_url)}</link>\n'
+            f'    <description>{esc(cfg.PAGE_DESCRIPTION)}</description>\n'
+            '    <language>en-us</language>\n'
+            f'    <atom:link href="{esc(site_url + "/feed.xml")}" rel="self" type="application/rss+xml"/>\n'
+            + "\n".join(items) + "\n"
+            '  </channel>\n'
+            '</rss>\n'
+        )
+        (args.out / "feed.xml").write_text(feed)
+        logger.info("wrote feed.xml (%d items)", len(items))
+
     return 0
 
 if __name__ == "__main__":
