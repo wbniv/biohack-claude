@@ -637,6 +637,14 @@ git push
 task bump   # syncs foundry-apt/ to the publish repo and tags next patch version
 ```
 
+**After committing**, add a Debian ITP tracking item to `TODO.md` under `### Deferred follow-ups`:
+
+```
+- [ ] **File Debian ITP for `<name>`** — `<upstream-license>`, `<upstream-url>`. Check [wnpp.debian.org](https://bugs.debian.org/cgi-bin/pkgreport.cgi?pkg=wnpp) for existing RFP/ITP first.
+```
+
+Use `/todo` to add it, or append manually. This ensures every package we vendor has a tracked path back to the Debian archive.
+
 > **`task sync` uses `git archive`** — only committed files are exported to the mirror. Do NOT run `build-all.sh` locally and then sync without committing first: dpkg-buildpackage leaves `debian/.debhelper/`, `debhelper-build-stamp`, `*.buildinfo`, `*.changes`, and `*.deb` files in the source tree. These are gitignored but `rsync` would copy them blindly. `git archive` sidesteps the problem entirely. If you see build artifacts showing up in a sync commit, check that `Taskfile.yml` is using `git archive` (not `rsync`) and that `foundry-apt/.gitignore` covers `packages/**/.debhelper/` etc.
 
 Watch the publish workflow (`gh run watch -R foundry-linux/foundry-apt $RUN_ID`). When it goes green, verify on the live site:
