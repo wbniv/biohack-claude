@@ -364,7 +364,7 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
         "UserPromptSubmit": ["transcript-logger.sh"],
         "PreToolUse":       ["plan-first.sh", "commit-checklist.sh", "tf-blocker.sh"],
         "PostToolUse":      ["plan-migrate.sh", "md-preview.sh"],
-        "Stop":             ["todo-reminder.sh"],
+        "Stop":             ["todo-reminder.sh", "transcript-stop.sh"],
     }
 
     found: set[str] = set()

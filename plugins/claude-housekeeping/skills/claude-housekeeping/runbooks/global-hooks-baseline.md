@@ -25,7 +25,7 @@ unchanged.
 | **PostToolUse**    | **ExitPlanMode**  | **plan-migrate.sh** ← required for Plan-mode → docs/plans/ auto-copy                   |
 | PostToolUse        | Write\|Edit       | md-preview.sh                                                                          |
 | PostToolUse        | Write\|Edit\|MultiEdit | py-syntax.sh, shell-strict.sh                                                     |
-| Stop               | —                 | tab-orange.sh, todo-reminder.sh                                                        |
+| Stop               | —                 | tab-orange.sh, todo-reminder.sh, transcript-stop.sh                                    |
 
 ## Hook command form
 
@@ -98,13 +98,18 @@ supports JSON merge / patch, that's easier than hand-merging.
     "hooks": [
       { "type": "command", "command": "bash $HOME/.claude/hook-runner.sh todo-reminder.sh", "timeout": 5 }
     ]
+  },
+  {
+    "hooks": [
+      { "type": "command", "command": "bash $HOME/.claude/hook-runner.sh transcript-stop.sh", "timeout": 5 }
+    ]
   }
 ]
 ```
 
 The existing `SessionStart` and `Stop` blocks already have tab-color
 hooks. **Append** `session-clear-md-flags.sh` to `SessionStart` and
-`todo-reminder.sh` to `Stop` rather than replacing.
+`todo-reminder.sh` + `transcript-stop.sh` to `Stop` rather than replacing.
 
 ## Steps
 
