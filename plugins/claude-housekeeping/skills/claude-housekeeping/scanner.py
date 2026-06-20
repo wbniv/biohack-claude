@@ -49,6 +49,7 @@ CATEGORIES_ORDER = [
     ("dup-memories",   "Cross-project duplicate memories"),
     ("missing-cascade","Missing global memory cascade"),
     ("leaked-project-memories", "Project-scope memories in a global dir"),
+    ("unmirrored-memory", "Per-project memory not stored in its repo"),
     ("dup-commands",   "Cross-project duplicate commands"),
     ("skill-frontmatter", "Skills with missing required frontmatter fields"),
     ("skill-install-drift", "Installed skill ≠ git plugin source"),
@@ -69,6 +70,7 @@ CATEGORY_COLUMNS: dict[str, list[str]] = {
     "dup-memories":      ["#", "Memory", "Projects (≥3)", "Action"],
     "missing-cascade":   ["#", "Project", "Missing", "Stale", "Collisions"],
     "leaked-project-memories": ["#", "Memory", "Found in", "Recommended destination"],
+    "unmirrored-memory": ["#", "Project", "Memory files", "Repo tracks `!.claude/memory/`"],
     "dup-commands":      ["#", "Command", "Projects", "Action"],
     "skill-frontmatter": ["#", "Skill", "Missing"],
     "missing-md-history": ["#", "Project", "Missing total", "Breakdown"],
@@ -85,6 +87,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
     "dup-memories":      "Per-project: `~/SRC/<project>/.claude/memory/<name>` — promote to `~/.claude/memory/<name>`",
     "missing-cascade":   "Globals at `~/.claude/projects/-home-will/memory/<name>` → symlinks at `~/SRC/<project>/.claude/memory/<name>`. Apply via the recommendation's command block.",
     "leaked-project-memories": "Source: `~/.claude/memory/<name>` or `~/.claude/projects/-home-will/memory/<name>`. Destination: `~/SRC/<owner>/.claude/memory/<name>` as a real file (not a cascade symlink).",
+    "unmirrored-memory": "Loader dir `~/.claude/projects/<slug>/memory` should be a symlink → `~/SRC/<project>/.claude/memory`. Drift = it's a real dir (memory un-versioned in the project repo). Command block relocates it + symlinks back. Reference: llvm-mos-65816.",
     "dup-commands":      "Per-project: `~/SRC/<project>/.claude/commands/<name>` — global at `~/.claude/commands/<name>`",
     "skill-frontmatter": "Global skills: `~/.claude/skills/<name>/SKILL.md`. Project-scope: `~/SRC/<project>/.claude/skills/<name>/SKILL.md`.",
     "missing-md-history": "Per project. Scans `docs/plans/*.md`, `docs/investigations/*.md`, `CLAUDE.md`, `README.md`. Excludes HISTORY/MEMORY/TODO/memory-visualization basenames. Run `~/SRC/python-tui-lib/scripts/regen-md-history.sh <file>` per item, or use the command block to bulk-fix a project.",
@@ -103,6 +106,7 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "dup-memories":      "Same-filename `feedback_*.md` across ≥3 real project memory dirs (worktrees excluded) — candidates for promotion to global.",
     "missing-cascade":   "Per active project: global memory files at `~/.claude/projects/-home-will/memory/` not yet symlinked into the project's `.claude/memory/`. Also flags stale symlinks (target gone) and real-file collisions.",
     "leaked-project-memories": "Files matching `project_*.md` or `reference_*.md` (the project-scope naming convention) found in a global memory dir. They should live in their owning project's `.claude/memory/` as a real file, not in global.",
+    "unmirrored-memory": "Per active project: the cwd-siloed loader dir `~/.claude/projects/<slug>/memory` is a real directory instead of a symlink to the project's own repo `.claude/memory/` — so its memory isn't version-controlled in the project repo. Recommends the relocate-to-repo + symlink migration.",
     "dup-commands":      "Commands at `~/.claude/commands/*.md` that also appear in real project dirs (worktrees excluded).",
     "skill-frontmatter": "SKILL.md files missing YAML frontmatter, or whose frontmatter is missing any of name/description/version. Catches skills that slipped in before formalization.",
     "skill-install-drift": "An installed skill under `~/.claude/skills/` differs from its git-tracked plugin source under `~/SRC/biohack-claude/plugins/*/skills/` — the live copy was edited in place, or the published plugin is stale. Pick the canonical side, sync the other, commit the source.",
@@ -810,6 +814,68 @@ def scan_leaked_project_memories(projects: list[Project]) -> list[Recommendation
                 command_block=cmd_block_relocate_project_memory(f, owner),
                 severity="warn",
             ))
+    return recs
+
+
+def _project_dir_slug(path: Path) -> str:
+    """Claude's cwd-siloed auto-memory key: the project path with '/' and '.' -> '-'."""
+    return str(path).replace("/", "-").replace(".", "-")
+
+
+def _repo_tracks_memory(p: Project) -> bool:
+    """True if the project repo's .gitignore un-ignores .claude/memory/ (so memory is committable)."""
+    try:
+        return "!.claude/memory/" in (p.path / ".gitignore").read_text()
+    except OSError:
+        return False
+
+
+def cmd_block_mirror_memory(p: Project, siloed: Path) -> str:
+    repo = p.path
+    return f"""# backup the real siloed memory dir
+cp -a {siloed} {siloed}.bak.$(date -u +%Y%m%dT%H%M%SZ)
+# pre-check: must currently be a real dir (not already a symlink)
+[ -L "{siloed}" ] && {{ echo "already a symlink — skip"; exit 0; }}
+# action: relocate into the project repo, wire .gitignore, replace the loader dir with a symlink.
+# (cp -a preserves real files as real and generic cascade symlinks as symlinks; the relative
+#  ../../../../.claude/memory targets still resolve — both locations are 4 levels below ~.)
+mkdir -p {repo}/.claude/memory
+cp -a {siloed}/. {repo}/.claude/memory/
+grep -q '!.claude/memory/' {repo}/.gitignore 2>/dev/null || printf '\\n# Claude per-project memory\\n.claude/*\\n!.claude/memory/\\n' >> {repo}/.gitignore
+rm -rf {siloed}
+ln -s {repo}/.claude/memory {siloed}
+# post-check
+[ -L "{siloed}" ] && echo "OK: {siloed} -> $(readlink {siloed})"
+# then, IN THE PROJECT REPO (project-specific stays real; promote any generics via scan #8/#9):
+#   cd {repo} && git add .claude/memory .gitignore && git commit -m 'memory: store in repo + symlink loader dir'
+# and register {p.name} in ~/.claude/projects.json if it isn't already."""
+
+
+def scan_unmirrored_project_memory(projects: list[Project]) -> list[Recommendation]:
+    """Storage-location drift: a project's cwd-siloed loader dir
+    `~/.claude/projects/<slug>/memory` should be a SYMLINK to the project's own
+    repo `~/SRC/<proj>/.claude/memory` — so project-specific memory is
+    version-controlled in the project repo (and generic memory cascades in as
+    symlinks to the `~/.claude/memory` master, scan #9). Drift = the siloed dir
+    is a REAL directory: its memory then sits in the gitignored homedir tree,
+    un-version-controlled in the project repo. Reference migration: llvm-mos-65816
+    (plan 2026-06-20-memory-organization-two-tier.md)."""
+    recs: list[Recommendation] = []
+    for p in projects:
+        siloed = GLOBAL_CLAUDE / "projects" / _project_dir_slug(p.path) / "memory"
+        if siloed.is_symlink() or not siloed.is_dir():
+            continue  # correctly symlinked, or no memory yet -> nothing to migrate
+        files = [f for f in siloed.iterdir() if f.name.endswith(".md")]
+        if not files:
+            continue
+        recs.append(Recommendation(
+            category="unmirrored-memory",
+            title=f"Move {p.name} memory into its repo + symlink the loader dir",
+            details="",
+            row=[p.name, str(len(files)), "ok" if _repo_tracks_memory(p) else "**add**"],
+            command_block=cmd_block_mirror_memory(p, siloed),
+            severity="warn",
+        ))
     return recs
 
 
@@ -2472,6 +2538,7 @@ def main() -> int:
     recs.extend(scan_duplicate_memories(scan_set))
     recs.extend(scan_missing_global_cascade(scan_set))
     recs.extend(scan_leaked_project_memories(scan_set))
+    recs.extend(scan_unmirrored_project_memory(scan_set))
     recs.extend(scan_duplicate_commands(scan_set))
     recs.extend(scan_missing_md_history(scan_set))
     recs.extend(scan_skill_frontmatter(scan_set))
