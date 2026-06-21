@@ -64,6 +64,31 @@ If `--force` was passed, proceed with the normal flow and overwrite the existing
 
 In Debian convention `pkg-dev` means "headers/`.so` symlinks for linking against `pkg`" (e.g. `libfoo-dev`). If you're packaging a metapackage that means "tools to develop the upstream *project* itself" — **don't call it `<project>-dev`**, that collides with the convention and confuses users + tooling. Use a full word: `<project>-development`, `<project>-contributor`, or `<project>-build`. Description still carries the meaning; the name shouldn't fight the convention. Real example: `worldfoundry-development` (engine contributor install) — not `worldfoundry-dev`.
 
+### Renaming an already-published package
+
+Sometimes you rename after publishing (e.g. to match the Repology slug). Renames are
+welcome — the rule is **nothing breaks, all call-sites in one commit**:
+
+1. `git mv packages/<old> packages/<new>` (preserves history; git shows renames, not
+   delete+add).
+2. In the moved tree: update `Source:` + `Package:` in `debian/control`, the
+   `debian/changelog` (new top entry under the **new** name, bumped revision, with a
+   rename note; leave old entries historical), `build.sh`'s `NAME=` (drives the `.deb`
+   filename) + help text, the `debian/rules` DESTDIR (`debian/<new>/...`), and the
+   per-package `debian/<new>.manpages` filename.
+3. **The installed binary/command need not change** — package name ≠ binary name is fine
+   (e.g. `python3-picire` ships `picire`; `asar-snes-assembler` ships `asar-snes`). Keep
+   a good command name; renaming the package doesn't force renaming the command, man
+   page, or `.desktop`.
+4. Update every referrer in the *same* commit: dependent metapackage `Depends:` (+ bump
+   its changelog), `LICENSES-VENDORED.md`, `README.md`, `CLAUDE.md`, `TODO.md` (ITP line).
+5. **Pre-1.0 / no users → no transitional dummy package.** Otherwise ship a transitional
+   `<old>` package that `Depends: <new>` for the upgrade path.
+6. **Drop the old name from the live repo.** A fresh-`dist/` CI rebuild + `rclone sync`
+   (which deletes extraneous R2 files) removes it. If the repo *caches* `dist/` across
+   runs, `prune-dist.sh` must also drop orphaned `.debs` (package no longer in any
+   `packages/*/debian/control`) or the old name lingers in the cache forever.
+
 ---
 
 ## Step 1 — Universe check (BLOCKING — do this first)
@@ -91,6 +116,32 @@ and to the metapackage's Depends: line. Don't duplicate.
 
 If `apt-cache search` finds a near-match under a different name (e.g. `<name>-tools`), surface that and ask the user whether it covers their need.
 
+### Universe presence is necessary, not sufficient — also check version, footprint, and the real command
+
+Three follow-ups before you wire a universe package into a metapackage's `Depends:`. Each is a bug we've actually hit:
+
+1. **Version floor.** "It's in universe" ≠ "it's new enough." A dependency may require a higher version than universe ships — e.g. `shrinkray` needs `textual >= 8.0.0`, but Ubuntu 26.04 universe froze `python3-textual` at `2.1.2`. Check the candidate against any required floor (`apt-cache policy <dep>`); if it's too old you're back to packaging a newer one (a cascade — see the Python transitive-deps note in Step 3).
+
+2. **Footprint vs the target edition's size budget.** A tiny tool can drag a huge closure: `cvise` is 12 MiB itself but pulls `libllvm21`+`libclang-cpp21`+`clang-format-21` for a **326 MiB** install closure. That decides *which edition* it belongs in (Foundry's anvil targets a 4 GB stick, so LLVM-class mass goes in `foundry-atelier`, not `foundry-core`/anvil — exactly like `ghidra`). Measure the closure before choosing placement. Note `apt-get -s install` does **not** print an "After this operation…" line on apt 3.x (ubuntu:26.04), so sum `Installed-Size` yourself:
+
+   ```bash
+   docker run --rm ubuntu:26.04 bash -c '
+     apt-get update -qq 2>/dev/null
+     pkgs=$(apt-get install -s -y <name> | awk "/^Inst /{print \$2}")
+     t=0; for p in $pkgs; do s=$(apt-cache show "$p" 2>/dev/null | awk -F": " "/^Installed-Size:/{print \$2; exit}"); t=$((t+${s:-0})); done
+     echo "$((t/1024)) MiB install closure for <name>"'
+   ```
+
+   If a chunk of that closure is shared with packages already on the image (`libllvm21` is also pulled by `mesa-vulkan-drivers`/`yuzu`/`rust`), the *marginal* cost is smaller — measure against the real image, not just the bare container.
+
+3. **The command is not always the package name.** Before writing install-summary lines, e2e tool-checks, or telling the user "run `<name>`", inspect what the package actually ships in `/usr/bin`:
+
+   ```bash
+   (cd "$(mktemp -d)" && apt-get download <name> >/dev/null 2>&1 && dpkg-deb -c <name>_*.deb | grep -E "usr/bin|usr/sbin")
+   ```
+
+   Real example: the `delta` reducer package ships **`singledelta`/`multidelta`/`topformflat`** — there is no `delta` command (that name belongs to the popular `git-delta`). Getting this wrong silently breaks the e2e harness and any `command -v` check. While you're here, eyeball those `/usr/bin` paths for collisions with already-shipped or popular packages (a real file conflict blocks `apt install`).
+
 ---
 
 ## Step 2 — Resolve upstream + fetch source
@@ -116,6 +167,8 @@ SHA256=$(sha256sum upstream.tar.gz | awk '{print $1}')
 ```
 
 > **Non-`v`-prefixed tag formats.** Some upstreams (e.g. vgmstream) use `r<number>` or `rel-<number>` rather than `v<number>`. The tarball URL and extracted top-dir will contain the full tag (e.g. `vgmstream-r2083/`). The Debian version in `debian/changelog` MUST start with a digit — strip any leading letter from the tag when constructing the version. So tag `r2083` → Debian version `2083-1foundry1`, not `r2083-1foundry1` (dpkg-buildpackage rejects versions that start with a non-digit). Also update `debian/watch` to match the non-standard prefix (see Step 3 §6).
+
+> **Check the upstream's age and archived status — old C/C++ upstreams will likely need build patches.** `gh api repos/<owner>/<repo> --jq '{archived,pushed_at}'` shows both. A long-dormant or archived upstream (e.g. `halfempty`: last released 2020, repo archived 2026) was last built against an older toolchain; on Ubuntu 26.04 (GCC 15, glibc 2.41) expect `-Werror` trips, missing `#include`s the compiler now requires, or removed APIs. Budget for `debian/patches/`, and confirm the newest tag is still the one you want (an archived repo's "latest release" may predate community forks). These build-fix patches are exactly the upstreamable kind — see Step 7.
 
 **Tarball URL flow:** as above, just curl + sha256.
 
@@ -257,6 +310,24 @@ DEBEMAIL="packages@<repo-domain>" DEBFULLNAME="Foundry Linux" \
    - `<DEPENDS_EXTRA>` → extra runtime deps beyond `${shlibs:Depends}, ${misc:Depends}`
    - `<SECTION>` → e.g. `devel`, `utils`, `sound`
    - `<ARCHITECTURE>` → `any` (per-arch build) or `all` (pure metapackage)
+   - **`X-Repology-Project`** (Source stanza) → the package's Repology project slug,
+     which drives the apt-index version badge. **Required for every vendored package** —
+     `scripts/check-repology-badges.sh` (a git pre-commit + Claude PostToolUse guard, and
+     `task check-badges`) fails the commit if a `packages/*/build.sh` package omits it.
+     The slug is frequently **not** the Debian package name — look it up at
+     `https://repology.org/api/v1/projects/?search=<term>`: the bare name is often empty
+     or a collision (e.g. `asar` is the Electron tool; the SNES assembler is
+     `asar-snes-assembler`), and PyPI packages are `python:<name>` (so `python3-picire` →
+     `python:picire`). If the upstream genuinely isn't on Repology (your own tool, too
+     niche), set `X-Repology-Project: none` — the field stays present (so the choice is
+     deliberate) and the index skips the badge. `task audit-badges` reports coverage;
+     `task set-badge PKG=<pkg> PROJECT=<slug|none>` sets it without hand-editing control.
+     **The field has a second consumer:** `scripts/generate-repology-ruleset.sh` (the Repology
+     *producer* onboarding) derives the `repology-rules` YAML from it — a `setname` when the slug
+     differs from the source name (`task`→`go-task`, `python3-picire`→`python:picire`), a `remove`
+     for `none` + the un-fielded metapackages. After adding/renaming a vendored package, run
+     `task gen-repology-ruleset` so `repology/foundry-linux.yaml` stays in sync for the eventual
+     repology-rules PR.
 
 2. **`debian/copyright`** — replace `<TEMPLATES>/copyright`:
    - DEP-5 format
@@ -302,12 +373,23 @@ DEBEMAIL="packages@<repo-domain>" DEBFULLNAME="Foundry Linux" \
 
    | Build backend | Additional Build-Depends |
    |---|---|
-   | `setuptools` (`setup.py` or `pyproject.toml` + `setuptools`) | `dh-python python3-all python3-setuptools` |
+   | `setuptools` (legacy `setup.py`/`setup.cfg`, no `[build-system]`) | `dh-python python3-all python3-setuptools` |
+   | `setuptools` **with a `pyproject.toml [build-system]`** | `dh-python python3-all python3-setuptools pybuild-plugin-pyproject` — without the plugin, pybuild takes the PEP517 path on Ubuntu 26.04 and dies with `configure: plugin pyproject failed with: PEP517 plugin dependencies are not available`. If `[build-system].requires` lists `setuptools_scm`, also add `python3-setuptools-scm` **and** `export SETUPTOOLS_SCM_PRETEND_VERSION=<ver>` in `debian/rules` (release sdists carry no git tags, so version detection otherwise fails). |
    | `hatchling` | `dh-python python3-all pybuild-plugin-pyproject python3-hatchling` |
    | `flit` | `dh-python python3-all pybuild-plugin-pyproject python3-flit-core` |
    | `poetry` | `dh-python python3-all pybuild-plugin-pyproject python3-poetry-core` |
 
    Check `pyproject.toml → [build-system] → requires` and `build-backend` to identify which backend applies. All of these are in Ubuntu 26.04 universe.
+
+   **Resolve the full *runtime* dep tree against universe FIRST — then recurse, or fall back to pipx.** A Python package's `Depends:` (its `requires_dist` / `[project].dependencies`) must each exist in universe *at a satisfying version*, or the `.deb` installs but is broken. Any runtime dep that's missing or too old must itself be packaged (recursively): `picire` pulls `inators` (not in universe → also package `python3-inators`). List the tree and check each before committing to `.deb`:
+
+   ```bash
+   for dep in <dep1> <dep2> ...; do printf "%-22s " "$dep"; apt-cache policy "python3-$dep" 2>/dev/null | awk "/Candidate/{print \$2}" | grep . || echo NOT-IN-UNIVERSE; done
+   ```
+
+   **When the cascade is deep, prefer `pipx` over `.deb`.** If a Python *application* needs several missing or too-new deps (e.g. `shrinkray` needs `textual>=8` vs universe's `2.1.2`, plus `textual-plotext` which isn't packaged at all), packaging the whole subtree is a maintenance sink. Install it via `pipx` in the Phase 0 script instead (precedent: `pipx install codemagic-cli-tools` in `install-foundry-ios-development.sh`). **Trade-off:** a pipx tool is *not* in any metapackage `Depends:` and therefore *not baked into the ISO* — it lands only on installed/booted systems. Use `.deb` when ISO presence matters and the subtree is shallow; use `pipx` when the subtree is deep and installed-system presence is enough.
+
+   **Old package + much-newer dep → smoke-test the integration, not just the build.** A `.deb` can build cleanly yet fail at import: e.g. `picire` (2021) against `inators` (2.1.1, 2025) may hit API drift. Run the actual CLI (`<cmd> --help` plus a one-line real invocation) in the smoke-test container; if it breaks, pin a dep version contemporaneous with the package.
 
    **Python 3.13+ audioop removal:** `audioop` was removed from the Python stdlib in Python 3.13. Ubuntu 26.04 ships Python 3.14, so any package that does `import audioop` will fail. The fix is `python3-audioop-lts` (in Ubuntu universe at 0.2.2-2), which reinstates the `audioop` module. Add it to `Depends:` for any audio-manipulation package that uses audioop (check `grep -r audioop` in the source). Note: `pyaudioop` (the other common fallback name) does **not** exist on PyPI — `audioop-lts` is the correct package.
 
@@ -451,11 +533,42 @@ lintian dist/<name>_*.deb 2>&1
 Inside the container (or for one-off debugging), the raw build command is:
 
 ```bash
-dpkg-buildpackage -us -uc -b
-# -us  unsigned source
-# -uc  unsigned changes
-# -b   binary-only (skip source-package generation locally; CI does -S separately)
+dpkg-buildpackage -us -uc -b      # binary .deb
+dpkg-buildpackage -us -uc -S -d   # source package (.dsc + tarballs) — ship this too
+# -us/-uc  unsigned source/changes
+# -b  binary-only · -S  source-only · -d  skip build-dep check (the source pass needs none)
 ```
+
+**Build the source package too — don't ship a binary-only repo.** A real apt repo publishes a
+`Sources` index so users can `apt-get source <pkg>` and rebuild (reproducibility), and it's how
+Repology tracks Debian/Ubuntu derivatives (`DebianSourcesParser`). The source pass emits
+`<name>_<ver>.dsc` + `…debian.tar.xz` (+ the `.orig.` tarball for quilt). Move all of them into
+`dist/` alongside the `.deb` — aptly publishes a `Sources` index automatically once source
+packages are in the repo.
+
+- **`3.0 (quilt)` needs `<src>_<upstreamver>.orig.tar.{gz,xz}` in the *parent* dir.** The
+  vendored `build.sh` pattern already stages this (it downloads the upstream tarball under
+  exactly that name before extracting — see `packages/halfempty/build.sh`), so the source pass
+  is essentially free: just add it after the `-b` build, before `WORKDIR` is cleaned, and move
+  the `.dsc`/tarballs to `dist/`. `3.0 (native)` metapackages need nothing extra.
+- **Run `lintian` on the `.dsc`, not just the `.deb`.** Source builds run source-level checks
+  the binary build skips — e.g. `build-depends-on-obsolete-package: pkg-config => pkgconf`.
+  Fix these (or override with justification) the same as binary lint.
+- **Binary assets vendored under `debian/` (an icon `.png`, etc.) fail the source pass** with
+  `dpkg-source: error: unwanted binary file: debian/<file>` — `3.0 (quilt)` refuses binaries
+  under `debian/` unless allowlisted. The `-b` binary build doesn't check this; only `-S` does.
+  Add a `debian/source/include-binaries` file listing each one (one path per line, e.g.
+  `debian/<name>.png`). Real case: `mesen2` (vendors a desktop icon).
+- **Patches applied *in-tree* (not via quilt) break the source pass** with `dpkg-source: the
+  patch has fuzz`. Some upstreams are CRLF and GNU `patch`/quilt fuzz on them, so `build.sh`
+  applies the fix with `perl -i` instead — but `dpkg-source -b` then re-applies the
+  `debian/patches/series` patches itself against the pristine orig and they don't apply. Fix:
+  after the in-tree patching and **before** the source pass, drop the staged pristine orig and
+  empty the staged series so `emit_source_package` synthesises a self-contained orig from the
+  already-patched tree and `dpkg-source` applies nothing:
+  `rm -f "$WORKDIR/<name>_<ver>.orig.tar."* ; : > "$SRC_DIR/debian/patches/series"`. The binary
+  build is unaffected (its `dpkg-source --before-build` then applies nothing; the tree is already
+  patched). Real case: `tilemap-studio` (CRLF upstream, patched via perl).
 
 The .deb lands in `$WORKDIR/<name>_<upstream>-<revision>_<arch>.deb`. Build-time output you should see (proof debhelper is doing its job):
 
@@ -618,6 +731,15 @@ via:
 
 (Or hand-edit the changelog and bump the version in the topmost stanza.)
 
+> **Transitive-only deps must go in `out_of_catalogue`.** If `<name>` is pulled only
+> *transitively* — a library dep that rides via another package's `Depends:` and is **not**
+> added to any metapackage's direct `Depends:` (e.g. `python3-inators` arrives via
+> `python3-picire`) — add it to the `out_of_catalogue` array in `data/categories.json`.
+> Otherwise `task site-build`'s catalogue audit (`scripts/build-packages-data.js`) flags it as
+> an **unowned package and fails the site build/deploy** (`✗ unowned packages — build FAIL`).
+> User-facing packages don't need this — they're owned by the metapackage `Depends:` you just
+> edited.
+
 **Pure metapackages use the same `debian/` layout.** No special path. The only difference
 is `debian/source/format` = `3.0 (native)` (vs `3.0 (quilt)` for vendored upstreams) and
 the version has no Debian revision suffix (`1.0.2`, not `2.4.1-1foundry1`). Every package
@@ -636,6 +758,19 @@ git commit -m "feat(foundry-apt): package <name> as a .deb (debhelper)"
 git push
 task bump   # syncs foundry-apt/ to the publish repo and tags next patch version
 ```
+
+> **Repo-publish conventions (set once in the repo's publish script, not per-package — but
+> don't let a package land in a repo that lacks them):**
+> 1. **Origin/Label.** The aptly publish must pass `-origin`/`-label` set to the repo's vendor
+>    name (e.g. `Foundry Linux`), not aptly's `. <suite>` default — apt clients and Repology
+>    surface these. foundry-apt enforces it via `scripts/check-publish-metadata.sh` + a Claude
+>    PostToolUse hook on `publish-local.sh`.
+> 2. **Publish source packages.** The repo must carry a `Sources` index (Step 4 builds the
+>    `.dsc` + tarballs into `dist/`; aptly publishes them automatically). Binary-only is a
+>    smell — it blocks `apt-get source` and the `DebianSourcesParser` path Repology uses for
+>    derivatives.
+>
+> The `new-web-apt-repo` skill scaffolds both for a fresh repo.
 
 **After committing**, add a Debian ITP tracking item to `TODO.md` under `### Deferred follow-ups`:
 
