@@ -1,7 +1,14 @@
 # vendor/ — Third-party plugin evaluation
 
-This directory holds third-party Claude Code plugins under evaluation as git submodules.
-Each submodule has an `EVALUATION.md` at its root tracking status and notes.
+This directory holds third-party Claude Code plugins under evaluation. Each vendored
+skill lives in its own `vendor/<name>/` wrapper:
+
+- `vendor/<name>/upstream/` — the upstream repo, added as a git submodule (pinned sha)
+- `vendor/<name>/EVALUATION.md` — my evaluation, tracked by **this** repo
+
+The wrapper exists because a file committed *inside* a submodule belongs to the
+submodule's own history, not ours — it would vanish on the next `git submodule update`.
+Nesting the submodule one level down (`upstream/`) keeps `EVALUATION.md` parent-tracked.
 
 ## Lifecycle
 
@@ -64,14 +71,23 @@ rejection-reasons:
 
 ```bash
 # Add for evaluation
-git submodule add https://github.com/them/their-skill vendor/their-skill
-$EDITOR vendor/their-skill/EVALUATION.md     # state: evaluating
+git submodule add https://github.com/them/their-skill vendor/their-skill/upstream
+$EDITOR vendor/their-skill/EVALUATION.md          # state: evaluating
 
 # Promote to kept-reference
-# 1. Set state/tier/stars/last-reviewed in EVALUATION.md
-# 2. Add to .claude-plugin/marketplace.json:
-#    { "name": "their-skill", "source": { "source": "github", "repo": "them/their-skill" }, ... }
-# 3. Run: task gen-marketplace
+# 1. Set state/tier/stars/last-reviewed in vendor/<name>/EVALUATION.md. The `plugin:`
+#    field is the name you give it in the marketplace — it MAY differ from the
+#    upstream plugin name (install tolerates the rename; useful when two upstreams
+#    share a name). check-marketplace.sh matches the entry to this field.
+# 2. Add an external-source entry to .claude-plugin/marketplace.json — either the
+#    whole repo:
+#      { "name": "<name>", "source": { "source": "github",
+#        "repo": "them/their-skill", "sha": "…" }, … }
+#    …or one plugin out of a multi-plugin repo (subpath):
+#      { "name": "<name>", "source": { "source": "git-subdir",
+#        "url": "https://github.com/them/their-skill.git", "path": "sub/dir", "sha": "…" }, … }
+# 3. Run: task gen-marketplace   — preserves external entries (never drops them);
+#    check-marketplace.sh then requires this entry to be backed by a kept-reference eval.
 
 # Promote to kept-fork
 # 1. Copy plugin files to plugins/<name>/
@@ -82,7 +98,8 @@ $EDITOR vendor/their-skill/EVALUATION.md     # state: evaluating
 # Reject
 # 1. Set state: rejected, fill rejection-reasons in frontmatter
 # 2. mv vendor/<name>/EVALUATION.md vendor/_rejected/<name>.md
-# 3. git submodule deinit vendor/<name> && git rm vendor/<name>
+# 3. git submodule deinit vendor/<name>/upstream && git rm vendor/<name>/upstream
+#    (then remove the now-empty vendor/<name>/ wrapper dir)
 # 4. git commit
 ```
 
