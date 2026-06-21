@@ -66,8 +66,10 @@ for p in mp.get("plugins", []):
         problems.append(f"manifest lists '{name}' more than once")
     manifest[name] = p
 
-# kept-reference evals (plugin -> eval path) + every vendor eval's state
-kept_reference = {}
+# "Promoted" vendored skills back a marketplace entry: kept-reference (entry points at
+# the upstream repo) or kept-fork (entry points at my fork — PR open or merged upstream).
+PROMOTED = ("kept-reference", "kept-fork")
+promoted = {}        # plugin -> (eval path, state)
 vendor_states = {}   # vendor dir -> (state, plugin)
 if os.path.isdir(vendor_dir):
     for entry in sorted(os.listdir(vendor_dir)):
@@ -77,8 +79,8 @@ if os.path.isdir(vendor_dir):
         fm = parse_frontmatter(ev)
         state, plugin = fm.get("state"), fm.get("plugin")
         vendor_states[entry] = (state, plugin or entry)
-        if state == "kept-reference" and plugin:
-            kept_reference[plugin] = ev
+        if state in PROMOTED and plugin:
+            promoted[plugin] = (ev, state)
 
 # name -> dir, as found on disk (any plugins/<dir>/.claude-plugin/plugin.json)
 on_disk = {}
@@ -102,13 +104,13 @@ for name, entry in on_disk.items():
             f"(add an entry with \"source\": \"./plugins/{entry}\")"
         )
 
-# Each manifest entry resolves to EITHER a local plugins/ dir OR a kept-reference eval.
+# Each manifest entry resolves to EITHER a local plugins/ dir OR a promoted vendor eval.
 for name, entry in manifest.items():
     if is_external(entry):
-        if name not in kept_reference:
+        if name not in promoted:
             problems.append(
                 f"external entry '{name}' is not backed by a vendor/*/EVALUATION.md "
-                f"with state=kept-reference and plugin={name} "
+                f"with state=kept-reference|kept-fork and plugin={name} "
                 f"(add/promote the evaluation, or remove the entry)"
             )
         continue
@@ -125,12 +127,12 @@ for name, entry in manifest.items():
             f"manifest entry '{name}' has source '{source}', expected '{expected}'"
         )
 
-# A kept-reference eval whose plugin was never added to the manifest.
-for plugin, ev in kept_reference.items():
+# A promoted eval (kept-reference/kept-fork) whose plugin was never added to the manifest.
+for plugin, (ev, state) in promoted.items():
     if plugin not in manifest:
         rel = os.path.relpath(ev, repo)
         problems.append(
-            f"{rel} is state=kept-reference (plugin={plugin}) but no marketplace "
+            f"{rel} is state={state} (plugin={plugin}) but no marketplace "
             f"entry '{plugin}' exists (add the entry or change the state)"
         )
 
@@ -138,7 +140,7 @@ for plugin, ev in kept_reference.items():
 advisories = [
     f"vendor/{d}/ is state={st or '?'} (plugin={pl}) — not in marketplace (expected)"
     for d, (st, pl) in sorted(vendor_states.items())
-    if st != "kept-reference"
+    if st not in PROMOTED
 ]
 for a in advisories:
     print(f"  · {a}", file=sys.stderr)

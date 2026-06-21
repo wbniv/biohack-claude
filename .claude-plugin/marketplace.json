@@ -148,6 +148,21 @@
         "ref": "main",
         "sha": "feaf2b2f3c9544aa559836731cc80e363183f788"
       }
+    },
+    {
+      "name": "devops-skills",
+      "description": "Terraform/OpenTofu + AWS safety-first IaC skills (a superpowers fork) \u2014 plan review, drift detection, state surgery, with never-auto-apply hooks.",
+      "author": {
+        "name": "lgbarn",
+        "url": "https://github.com/lgbarn/devops-skills"
+      },
+      "category": "techops",
+      "source": {
+        "source": "github",
+        "repo": "wbniv/devops-skills",
+        "ref": "main",
+        "sha": "482bd9ca992657d110076f659d53aa5310e34c45"
+      }
     }
   ]
 }
