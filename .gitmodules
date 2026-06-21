@@ -1,0 +1,9 @@
+[submodule "vendor/devops-skills/upstream"]
+	path = vendor/devops-skills/upstream
+	url = https://github.com/lgbarn/devops-skills
+[submodule "vendor/cc-devops-skills/upstream"]
+	path = vendor/cc-devops-skills/upstream
+	url = https://github.com/akin-ozer/cc-devops-skills
+[submodule "vendor/devops-claude-skills/upstream"]
+	path = vendor/devops-claude-skills/upstream
+	url = https://github.com/ahmedasmar/devops-claude-skills

@@ -43,7 +43,8 @@ with open(mp_path) as f:
     mp = json.load(f)
 
 plugins_dir = os.path.join(repo, "plugins")
-plugins = []
+local = []
+local_names = set()
 
 for entry in sorted(os.listdir(plugins_dir)):
     pj_path = os.path.join(plugins_dir, entry, ".claude-plugin", "plugin.json")
@@ -71,19 +72,40 @@ for entry in sorted(os.listdir(plugins_dir)):
     record["source"] = f"./plugins/{entry}"
 
     # Preserve any MCP or extra source metadata from existing entry
-    if existing and existing.get("source", "").startswith("{"):
+    if existing and isinstance(existing.get("source"), str) and existing["source"].startswith("{"):
         record["source"] = existing["source"]
     if existing and "homepage" in existing:
         record["homepage"] = existing["homepage"]
 
-    plugins.append(record)
+    local.append(record)
+    local_names.add(pj["name"])
 
-mp["plugins"] = plugins
+# Preserve vendored "kept-reference" entries. These point at an external repo
+# (source is a github/git-subdir object, not a local "./plugins/…" path) and
+# have no plugins/<name>/ dir on disk, so the loop above never produces them.
+# They are added by hand when a vendored skill is promoted; carry them through
+# verbatim so a regen never silently drops them. check-marketplace.sh enforces
+# that each external entry is backed by a vendor/*/EVALUATION.md (kept-reference).
+def is_external(p):
+    src = p.get("source")
+    if isinstance(src, dict):
+        return True
+    return isinstance(src, str) and not src.startswith("./plugins/")
+
+external = [p for p in mp.get("plugins", [])
+            if is_external(p) and p.get("name") not in local_names]
+external.sort(key=lambda p: p.get("name", ""))
+
+mp["plugins"] = local + external
 with open(mp_path, "w") as f:
     json.dump(mp, f, indent=2)
     f.write("\n")
 
-print(f"marketplace.json updated — {len(plugins)} plugin(s)")
-for p in plugins:
+print(f"marketplace.json updated — {len(local)} local + {len(external)} vendored")
+for p in local:
     print(f"  {p['name']}  [{p.get('category', '—')}]")
+for p in external:
+    src = p.get("source", {})
+    origin = (src.get("repo") or src.get("url")) if isinstance(src, dict) else src
+    print(f"  {p['name']}  [vendored ← {origin}]")
 PYEOF

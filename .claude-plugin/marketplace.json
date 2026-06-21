@@ -116,6 +116,38 @@
       },
       "category": "techops",
       "source": "./plugins/package"
+    },
+    {
+      "name": "aws-cost-optimization",
+      "description": "AWS cost / FinOps workflows \u2014 find waste, rightsize, evaluate Reserved Instances vs Savings Plans, migrate to Graviton, and run monthly cost reviews.",
+      "author": {
+        "name": "ahmedasmar",
+        "url": "https://github.com/ahmedasmar"
+      },
+      "category": "techops",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/ahmedasmar/devops-claude-skills.git",
+        "path": "aws-cost-optimization",
+        "ref": "main",
+        "sha": "1489c33ad8829a11219e423327d6b59f8339cee4"
+      }
+    },
+    {
+      "name": "cc-devops-skills",
+      "description": "31 paired DevOps generators and validators \u2014 scaffold and lint production configs for Terraform, Docker, Kubernetes, Helm, and CI/CD pipelines.",
+      "author": {
+        "name": "akin-ozer",
+        "url": "https://github.com/akin-ozer"
+      },
+      "category": "techops",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/akin-ozer/cc-devops-skills.git",
+        "path": "devops-skills-plugin",
+        "ref": "main",
+        "sha": "feaf2b2f3c9544aa559836731cc80e363183f788"
+      }
     }
   ]
 }
