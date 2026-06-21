@@ -23,6 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Fast host-side gate: fail before the ~25 min build if any vendored
+      # package lacks an X-Repology-Project field (apt-index badge + ruleset).
+      - name: Check Repology badge coverage
+        run: bash {{APT_SUBDIR}}/scripts/check-repology-badges.sh
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

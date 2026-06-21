@@ -57,6 +57,19 @@ build_canonical() {
         mv "$deb" "${REPO_ROOT}/dist/"
         echo "OK   dist/$(basename "$deb")  ($(stat -c%s "${REPO_ROOT}/dist/$(basename "$deb")") bytes)"
     done
+
+    # Also build the SOURCE package (.dsc + tarballs) so aptly publishes a Sources
+    # index (apt-get source + Repology DebianSourcesParser). Native packages need
+    # nothing extra; 3.0 (quilt) packages need <name>_<upstreamver>.orig.tar.* staged
+    # in the parent dir — the per-package build.sh does that (see the /package skill),
+    # so here it's best-effort: warn (don't fail the build) if the source pass can't run.
+    if ( cd "${builddir}/${name}-${ver}" && dpkg-buildpackage -us -uc -S -d ) >/dev/null 2>&1; then
+        for src in "${builddir}/${name}_"*.dsc "${builddir}/${name}_"*.tar.*; do
+            [[ -f "$src" ]] && mv "$src" "${REPO_ROOT}/dist/" && echo "OK   dist/$(basename "$src")"
+        done
+    else
+        echo "WARN $name: source package skipped (quilt needs the orig tarball — see build.sh)" >&2
+    fi
 }
 
 fail=0

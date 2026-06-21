@@ -469,7 +469,7 @@ def render_setup_banner(cfg) -> str:
     suite = getattr(cfg, "DEFAULT_SUITE", "stable")
     codename = cfg.CODENAMES.get(suite, "")
     deb822 = (
-        f"Types: deb\n"
+        f"Types: deb deb-src\n"
         f"URIs: {cfg.SCHEME}://{cfg.HOST}\n"
         f"Suites: {suite}\n"
         f"Components: {' '.join(cfg.COMPONENTS)}\n"
@@ -478,15 +478,17 @@ def render_setup_banner(cfg) -> str:
     )
     classic = (
         f"deb [signed-by={cfg.KEYRING_PATH} arch={','.join(cfg.ARCHITECTURES)}] \\\n"
+        f"    {cfg.SCHEME}://{cfg.HOST} {suite} {' '.join(cfg.COMPONENTS)}\n"
+        f"deb-src [signed-by={cfg.KEYRING_PATH}] \\\n"
         f"    {cfg.SCHEME}://{cfg.HOST} {suite} {' '.join(cfg.COMPONENTS)}"
     )
     one_liner = (
         f"# 1. trust the signing key\n"
         f"curl -fsSL {cfg.SCHEME}://{cfg.HOST}/key.gpg \\\n"
         f"  | sudo gpg --dearmor -o {cfg.KEYRING_PATH}\n\n"
-        f"# 2. add the source\n"
-        f'echo "deb [signed-by={cfg.KEYRING_PATH}] \\\n'
-        f'{cfg.SCHEME}://{cfg.HOST} {suite} main" \\\n'
+        f"# 2. add the source (deb + deb-src so `apt-get source <pkg>` works)\n"
+        f'echo "deb [signed-by={cfg.KEYRING_PATH}] {cfg.SCHEME}://{cfg.HOST} {suite} main\n'
+        f'deb-src [signed-by={cfg.KEYRING_PATH}] {cfg.SCHEME}://{cfg.HOST} {suite} main" \\\n'
         f"  | sudo tee /etc/apt/sources.list.d/{cfg.HOST.split('.')[0]}.list\n\n"
         f"# 3. install\n"
         f"sudo apt update && sudo apt install {cfg.HOST.split('.')[0]}"

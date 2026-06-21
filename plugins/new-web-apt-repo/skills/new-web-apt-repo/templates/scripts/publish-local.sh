@@ -45,9 +45,13 @@ gpg_args=(-skip-signing)
 if [[ -n "$GPG_KEY" ]]; then
     gpg_args=(-gpg-key="$GPG_KEY" -batch)
 fi
+# -origin/-label set the published Release's Origin/Label to a clean vendor name
+# (apt clients + Repology surface them) instead of aptly's ". <suite>" default.
 aptly -config="$APTLY_CONFIG" publish repo \
     "${gpg_args[@]}" \
-    -architectures=amd64,arm64,all \
+    -origin="{{ORIGIN_LABEL}}" \
+    -label="{{ORIGIN_LABEL}}" \
+    -architectures=amd64,arm64,all,source \
     -distribution="$SUITE" \
     {{REPO_NAME}} filesystem:public:
 

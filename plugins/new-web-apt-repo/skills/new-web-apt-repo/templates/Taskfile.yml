@@ -61,6 +61,28 @@ tasks:
     cmds:
       - shellcheck scripts/*.sh scripts/recovery/*.sh
 
+  check-badges:
+    desc: "Verify every packages/*/build.sh declares X-Repology-Project (apt-index Repology badge)"
+    cmds:
+      - bash scripts/check-repology-badges.sh
+
+  audit-badges:
+    desc: "Report Repology-badge coverage across all built packages (badge / opt-out / MISSING)"
+    cmds:
+      - bash scripts/check-repology-badges.sh --report
+
+  set-badge:
+    desc: "Opt a package into the Repology badge — task set-badge PKG=<pkg> PROJECT=<repology-project|none>"
+    requires:
+      vars: [PKG, PROJECT]
+    cmds:
+      - bash scripts/set-repology-badge.sh "{{.PKG}}" "{{.PROJECT}}"
+
+  gen-repology-ruleset:
+    desc: "Regenerate repology/{{REPO_NAME}}.yaml (repology-rules) from X-Repology-Project fields"
+    cmds:
+      - bash scripts/generate-repology-ruleset.sh -o repology/{{REPO_NAME}}.yaml
+
   cache-cf-token:
     desc: "[recovery] Cache a freshly-minted CF operator token + back it up to R2 (see docs/runbooks/apt-secrets-recovery.md §3)"
     cmds:

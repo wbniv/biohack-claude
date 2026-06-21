@@ -1,7 +1,7 @@
 ---
 name: new-web-apt-repo
 description: Provision a new web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.
-version: 1.1.0
+version: 1.2.0
 ---
 
 Provision a new web-hosted signed APT repo on Cloudflare R2, backed by aptly + GitHub Actions.
@@ -41,6 +41,7 @@ Derive the full config:
 | `KEY_NAME` | title-cased GH_ORG + " Packages" |
 | `KEY_EMAIL` | argument or `packages@zone-name` |
 | `REPO_DESC` | `GH_ORG signed APT repo and packages` |
+| `ORIGIN_LABEL` | human display name for the published Release `Origin`/`Label` — title-cased GH_ORG (e.g. `Foundry Linux`, `WorldFoundry`). apt clients + Repology surface this; never leave aptly's `. <suite>` default. Ask if a nicer form is wanted. |
 | `TAG_PREFIX` | empty for dedicated repo (`v*` tags); `apt-` for monorepo (`apt-v*` tags) — prevents collision with the parent project's release tags. If the host repo already uses `v*` for deploys, MUST be `apt-`, and the parent workflow's `on.push.tags` must exclude `apt-v*`. |
 
 Show the derived values and ask for confirmation before touching any files.
@@ -84,6 +85,7 @@ find "$DEST" "$(pwd)/scripts/bootstrap-apt.sh" "$(pwd)/.github/workflows/publish
     -e "s|{{KEY_NAME}}|${KEY_NAME}|g" \
     -e "s|{{KEY_EMAIL}}|${KEY_EMAIL}|g" \
     -e "s|{{REPO_DESC}}|${REPO_DESC}|g" \
+    -e "s|{{ORIGIN_LABEL}}|${ORIGIN_LABEL}|g" \
     -e "s|{{TAG_PREFIX}}|${TAG_PREFIX}|g" \
     -e "s|{{GH_REPO}}|${GH_REPO}|g" \
     "$f"
@@ -307,7 +309,9 @@ if you want rich image previews.
 
 ### Repology badges
 
-Add a `REPOLOGY_PROJECTS` dict to `gen/config.py`:
+Two mechanisms — pick by how many packages you vendor:
+
+**(a) Central dict — simplest, fine for a handful.** Add `REPOLOGY_PROJECTS` to `gen/config.py`:
 
 ```python
 REPOLOGY_PROJECTS = {
@@ -318,10 +322,53 @@ REPOLOGY_PROJECTS = {
 }
 ```
 
-Packages listed here get a live SVG badge below their description linking to
-`https://repology.org/project/<name>/versions`. The badge images are loaded at
-page-render time from repology.org (no build-time fetch). Only appears on `.deb`
-file entries, not directories or metapackages.
+Packages listed get a live SVG badge below their description linking to
+`https://repology.org/project/<name>/versions` (loaded at page-render time, no
+build-time fetch; only on `.deb` entries, not directories/metapackages).
+
+**(b) Per-package `X-Repology-Project` field — recommended once you vendor more than a
+few (this is what `apt.foundrylinux.org` runs).** Put the field in each package's
+`debian/control` **Source** stanza instead of a central dict:
+
+```
+Source: halfempty
+...
+Homepage: https://github.com/googleprojectzero/halfempty
+X-Repology-Project: halfempty
+```
+
+`generate-meta.sh` lifts it into `meta/<name>.json` (`repology_project`) and
+`gen-index.py` renders the badge from there. The win: the badge info **travels with the
+package** — there's no central dict to forget to update — and it lets a commit-time
+guard *enforce* coverage.
+
+**Opt-out:** packages with no Repology project (your own tools, niche ones) set
+`X-Repology-Project: none` — present, so the choice is deliberate, but the index skips
+the badge. Normalise in `gen-index.py`:
+
+```python
+repology = meta.get("repology_project", "")
+if repology.strip().lower() == "none":
+    repology = ""   # explicit opt-out → no badge
+```
+
+**Guard + audit — the bit that stops you silently shipping a package with no badge (a real
+gap we hit on foundry-apt: ~16 vendored packages had drifted badge-less). Shipped in the
+template:** `scripts/check-repology-badges.sh` fails if any `packages/*/build.sh` package
+lacks the field; `scripts/set-repology-badge.sh` sets it (`task set-badge PKG=… PROJECT=…`).
+`task check-badges` / `audit-badges` are in the Taskfile and the guard runs in `publish.yml`'s
+CI. For dev-time enforcement, also add a git `pre-commit` hook + a `.claude/settings.json`
+PostToolUse hook on `packages/*/(build.sh|debian/control)` edits (mirror the licenses guard).
+
+**Producer onboarding — get tracked *by* Repology, not just badge-linking to it.** Once you
+have packages, `scripts/generate-repology-ruleset.sh` (`task gen-repology-ruleset`) derives the
+[repology-rules](https://github.com/repology/repology-rules) YAML from the same
+`X-Repology-Project` fields — `setname` for a slug that differs from the source name, `remove`
+for `none` + metapackages, all scoped `ruleset: {{REPO_NAME}}` (so it only affects your repo).
+Submit it plus a `repos.d/deb/{{REPO_NAME}}.yaml` to
+[repology-updater](https://github.com/repology/repology-updater) with `DebianSourcesParser` on
+your `Sources.gz` — so publish source packages (the `build-all.sh`/`publish-local.sh` templates
+already do).
 
 ### Changelog hover tooltip
 
@@ -587,16 +634,30 @@ edits don't accidentally undo them.
    the previous run (same source SHA → same output), so R2 sees no-ops — the
    cost is CI minutes, not correctness.
 
-   Real fix (non-trivial, not in the template yet): a two-step "skip if no
-   `apt/packages/**` diff" pattern. Either (a) `dorny/paths-filter` + restore
-   prior `apt/dist/` from R2 before init-repo.sh runs, or (b) split into
-   `publish-debs.yml` and `publish-index.yml` workflows triggered on different
-   path-filters. Both require persisting the existing `apt/dist/` somewhere
-   the index-only run can pull from, so it's a refactor not a one-liner.
+   **Solved (foundry-apt, 2026-06-21) — cache `dist/`.** `build-all.sh` already
+   skips a package when `dist/<name>_<ver>_*.deb` exists; CI just always started
+   from an empty `dist/`. Add an `actions/cache` step before the build:
 
-   Live with it for now — 7 min for a favicon edit is annoying but not
-   broken. Open a follow-up when index-only edits become common enough that
-   the CI time hurts.
+   ```yaml
+   - uses: actions/cache@v4
+     with:
+       path: dist
+       key: <repo>-dist-${{ github.sha }}
+       restore-keys: |
+         <repo>-dist-
+   ```
+
+   The per-SHA key always saves a fresh snapshot at job end; `restore-keys`
+   restores the previous run's `dist/`, so only version-bumped/new packages
+   rebuild (~35 min → a couple). **Pair it with an orphan-aware `prune-dist.sh`**
+   run in-container right after `build-all`: it keeps the newest `.deb` per package
+   AND drops any `.deb` whose package name is no longer in
+   `packages/*/debian/control` (renamed/removed). Without that second part the
+   persisted cache republishes stale + renamed packages forever — the empty-`dist/`
+   CI dropped those for free. Lift both from
+   [foundry-apt `publish.yml`](https://github.com/foundry-linux/foundrylinux.org/blob/main/foundry-apt/.github/workflows/publish.yml)
+   + `scripts/prune-dist.sh`. The first post-deploy run still does one full build
+   (populating the cache); every run after is incremental.
 
 10. **`find -name '<pkg>-*'` in vendored-upstream `build.sh` also matches the workdir.**
     When you write a `packages/<pkg>/build.sh` that fetches a tarball into
