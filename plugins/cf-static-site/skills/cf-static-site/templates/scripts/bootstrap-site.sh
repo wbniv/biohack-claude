@@ -16,7 +16,10 @@ set -euo pipefail
 GH_REPO="<GH_ORG>/<GH_REPO>"
 PAGES_PROJECT="<PROJECT_NAME>"
 CUSTOM_DOMAIN="<DOMAIN>"
-CI_TOKEN_NAME="<SLUG>-site-ci"
+# Naming convention: domain with dots→hyphens, e.g. biohack.net → biohack-net
+SLUG="${CUSTOM_DOMAIN//./-}"
+OPERATOR_TOKEN_NAME="${SLUG}-operator"
+CI_TOKEN_NAME="${SLUG}-site-ci"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP_CACHE="${REPO_ROOT}/.creds/bootstrap.env"
 
@@ -106,15 +109,24 @@ if ! $DRY_RUN; then
 
     if [[ -z "${CF_API_TOKEN:-}" ]]; then
         echo ""
-        echo "  Cloudflare API token needed. Create one at:"
+        echo "  Cloudflare operator token needed."
+        echo "  Edit existing '${OPERATOR_TOKEN_NAME}' OR create a new one:"
         echo "  https://dash.cloudflare.com/profile/api-tokens"
-        echo "  Click '+ Create Token' → 'Get started' next to 'Create Custom Token'"
-        echo "  Name: <SLUG>-operator"
-        echo "  Permissions:"
-        echo "    Zone    | Zone          | Read  (all zones)"
-        echo "    Zone    | DNS           | Edit  (all zones)"
-        echo "    Zone    | Page Rules    | Edit  (all zones)"
-        echo "    Account | Cloudflare Pages | Edit"
+        echo ""
+        echo "  Name: ${OPERATOR_TOKEN_NAME}"
+        echo ""
+        echo "  Category  Subcategory           Permission  Scope"
+        echo "  ────────  ────────────────────  ──────────  ──────────────"
+        echo "  Zone    │ Zone               │ Read     │ All zones"
+        echo "  Zone    │ DNS                │ Edit     │ All zones"
+        echo "  Zone    │ Page Rules         │ Edit     │ All zones"
+        echo "  Account │ Cloudflare Pages   │ Edit     │ Your account"
+        echo "  User    │ API Tokens         │ Edit     │ (no scope)"
+        echo ""
+        echo "  NOTE: 'User | API Tokens' is in the USER section of the"
+        echo "  permissions list, NOT the Account section."
+        echo "  This lets the script auto-create the scoped CI deploy token."
+        echo ""
         echo "  Account Resources: Include → select your account"
         echo ""
         until cf_token_valid 2>/dev/null; do
@@ -141,7 +153,7 @@ if ! $DRY_RUN; then
         err ""
         err "Add 'Pages Write' (Account scope) to your operator token:"
         err "  https://dash.cloudflare.com/profile/api-tokens"
-        err "  Find '<SLUG>-operator', click Edit, add:"
+        err "  Find '${OPERATOR_TOKEN_NAME}', click Edit, add:"
         err "    Account | Cloudflare Pages | Edit"
         err ""
         err "Or create a dedicated Pages token and export CF_API_TOKEN=<new-token>, then re-run."
@@ -209,61 +221,94 @@ else
 fi
 
 # ════════════════════════════════════════════════════════════════════════════
-# Step 2 — DNS CNAME for apex domain
-# Pages does NOT auto-create DNS even when the zone is on the same account.
-# Add a proxied CNAME (Cloudflare flattens it at the apex automatically).
+# Step 2 — DNS: replace old A/AAAA records with proxied CNAMEs for apex + www
+# Old hosting often leaves A records at apex and www pointing at the old host.
+# Pages requires proxied CNAMEs; Cloudflare CNAME-flattens at the apex.
 # ════════════════════════════════════════════════════════════════════════════
 
-info "[2] Creating DNS CNAME: ${CUSTOM_DOMAIN} → ${PAGES_PROJECT}.pages.dev"
+info "[2] Updating DNS records for ${CUSTOM_DOMAIN} and www.${CUSTOM_DOMAIN}"
 if $DRY_RUN; then
-    echo "  [dry-run] POST /zones/.../dns_records {type:CNAME, name:${CUSTOM_DOMAIN}}"
+    echo "  [dry-run] DELETE old A records; POST CNAME apex + www → ${PAGES_PROJECT}.pages.dev"
 else
-    CF_ZONE_ID=$(cf_api GET "/zones?name=${CUSTOM_DOMAIN}" | jq -r '.result[0].id')
+    CF_ZONE_ID="${CF_ZONE_ID:-$(cf_api GET "/zones?name=${CUSTOM_DOMAIN}" | jq -r '.result[0].id')}"
     [[ -n "$CF_ZONE_ID" && "$CF_ZONE_ID" != "null" ]] \
         || die "[2] Zone for ${CUSTOM_DOMAIN} not found — check CF_API_TOKEN has DNS:Edit"
 
-    CNAME_EXISTS=$(cf_api GET "/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=${CUSTOM_DOMAIN}" \
-        | jq -r '.result[0].id // empty' || true)
-    if [[ -n "$CNAME_EXISTS" ]]; then
-        ok "[2] DNS CNAME already exists"
-    else
-        cf_api POST "/zones/${CF_ZONE_ID}/dns_records" -d "$(jq -n \
-            --arg name    "$CUSTOM_DOMAIN" \
-            --arg content "${PAGES_PROJECT}.pages.dev" \
-            '{type:"CNAME",name:$name,content:$content,proxied:true,comment:"Cloudflare Pages site"}')" >/dev/null
-        ok "[2] DNS CNAME created: ${CUSTOM_DOMAIN} → ${PAGES_PROJECT}.pages.dev"
-    fi
+    _upsert_cname() {
+        local host="$1"
+        # Remove any A/AAAA records at this host (old hosting IPs)
+        local old_ids
+        old_ids=$(cf_api GET "/zones/${CF_ZONE_ID}/dns_records?name=${host}" \
+            2>/dev/null | jq -r '.result[] | select(.type == "A" or .type == "AAAA") | .id' || true)
+        if [[ -n "$old_ids" ]]; then
+            while IFS= read -r rec_id; do
+                cf_api DELETE "/zones/${CF_ZONE_ID}/dns_records/${rec_id}" >/dev/null 2>/dev/null || true
+                ok "[2] Removed old A/AAAA record $rec_id for ${host}"
+            done <<< "$old_ids"
+        fi
+
+        # Check for existing CNAME
+        local existing
+        existing=$(cf_api GET "/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=${host}" \
+            2>/dev/null | jq -r '.result[0].id // empty' || true)
+        if [[ -n "$existing" ]]; then
+            ok "[2] CNAME already exists for ${host}"
+        else
+            local resp
+            resp=$(cf_api POST "/zones/${CF_ZONE_ID}/dns_records" -d "$(jq -n \
+                --arg name    "$host" \
+                --arg content "${PAGES_PROJECT}.pages.dev" \
+                '{type:"CNAME",name:$name,content:$content,proxied:true}')" 2>/dev/null || echo '{}')
+            if echo "$resp" | jq -e '.success == true' &>/dev/null; then
+                ok "[2] CNAME created: ${host} → ${PAGES_PROJECT}.pages.dev"
+            else
+                warn "[2] Could not create CNAME for ${host}: $(echo "$resp" | jq -c '.errors')"
+            fi
+        fi
+    }
+
+    _upsert_cname "${CUSTOM_DOMAIN}"
+    _upsert_cname "www.${CUSTOM_DOMAIN}"
 fi
 
 # ════════════════════════════════════════════════════════════════════════════
-# Step 3 — Attach custom domain to Pages project
+# Step 3 — Attach apex + www as custom domains to Pages project
+# Pages does NOT auto-redirect www→apex — attaching both means both serve
+# the site. If you want www to 301 to apex, add a Cloudflare Redirect Rule.
 # ════════════════════════════════════════════════════════════════════════════
 
-info "[3] Attaching custom domain ${CUSTOM_DOMAIN} to Pages project"
-if $DRY_RUN; then
-    echo "  [dry-run] POST /accounts/.../pages/projects/${PAGES_PROJECT}/domains {name: ${CUSTOM_DOMAIN}}"
-else
-    DOMAIN_RESP=$(curl -sS -X POST \
+_attach_domain() {
+    local domain="$1" step="$2"
+    local resp
+    resp=$(curl -sS -X POST \
         "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}/domains" \
         -H "Authorization: Bearer ${CF_API_TOKEN}" \
         -H "Content-Type: application/json" \
-        -d "$(jq -n --arg d "$CUSTOM_DOMAIN" '{name:$d}')" 2>/dev/null || echo '{}')
-    if echo "$DOMAIN_RESP" | jq -e '.success == true' &>/dev/null; then
-        ok "[3] Custom domain ${CUSTOM_DOMAIN} attached"
-    elif echo "$DOMAIN_RESP" | jq -r '.errors[].message' 2>/dev/null \
-            | grep -qi "already\|conflict\|exist"; then
-        ok "[3] Custom domain ${CUSTOM_DOMAIN} already attached"
+        -d "$(jq -n --arg d "$domain" '{name:$d}')" 2>/dev/null || echo '{}')
+    if echo "$resp" | jq -e '.success == true' &>/dev/null; then
+        ok "[${step}] ${domain} attached to Pages project"
+    elif echo "$resp" | jq -r '.errors[].message' 2>/dev/null | grep -qi "already\|conflict\|exist"; then
+        ok "[${step}] ${domain} already attached"
     else
-        warn "[3] Domain attach response: $(echo "$DOMAIN_RESP" | jq -c '.')"
+        warn "[${step}] Domain attach response for ${domain}: $(echo "$resp" | jq -c '.')"
     fi
+}
+
+info "[3] Attaching apex + www custom domains to Pages project"
+if $DRY_RUN; then
+    echo "  [dry-run] POST /pages/projects/${PAGES_PROJECT}/domains {name: ${CUSTOM_DOMAIN}}"
+    echo "  [dry-run] POST /pages/projects/${PAGES_PROJECT}/domains {name: www.${CUSTOM_DOMAIN}}"
+else
+    _attach_domain "${CUSTOM_DOMAIN}"      3
+    _attach_domain "www.${CUSTOM_DOMAIN}"  3
 fi
 
 # ════════════════════════════════════════════════════════════════════════════
-# Step 3 — Create scoped CI token for Pages deploy
+# Step 4 — Create scoped CI token for Pages deploy
 # ════════════════════════════════════════════════════════════════════════════
 
 CI_TOKEN_VALUE=""
-info "[3] Creating scoped CI token '${CI_TOKEN_NAME}'"
+info "[4] Creating scoped CI token '${CI_TOKEN_NAME}'"
 
 if $DRY_RUN; then
     CI_TOKEN_VALUE="DRY_RUN_CI_TOKEN"
@@ -275,10 +320,10 @@ else
         || true)
 
     if [[ -z "${PAGES_PERM_ID:-}" ]]; then
-        warn "[3] Could not look up 'Pages Write' permission group automatically."
-        warn "[3] Create the token manually at: https://dash.cloudflare.com/profile/api-tokens"
-        warn "[3]   Name: ${CI_TOKEN_NAME}"
-        warn "[3]   Permission: Pages Write (Account scope)"
+        warn "[4] Could not look up 'Pages Write' permission group automatically."
+        warn "[4] Create the token manually at: https://dash.cloudflare.com/profile/api-tokens"
+        warn "[4]   Name: ${CI_TOKEN_NAME}"
+        warn "[4]   Permission: Pages Write (Account scope)"
         echo ""
         until [[ -n "${CI_TOKEN_VALUE:-}" ]]; do
             read -rsp "  Paste token value (input hidden): " CI_TOKEN_VALUE; echo
@@ -298,24 +343,24 @@ else
               }]
             }')")
         echo "$TOKEN_RESP" | jq -e '.success == true' &>/dev/null \
-            || die "[3] Failed to create CI token: $(echo "$TOKEN_RESP" | jq -c '.errors')"
+            || die "[4] Failed to create CI token: $(echo "$TOKEN_RESP" | jq -c '.errors')"
         CI_TOKEN_VALUE=$(echo "$TOKEN_RESP" | jq -r '.result.value')
-        ok "[3] CI token '${CI_TOKEN_NAME}' created"
+        ok "[4] CI token '${CI_TOKEN_NAME}' created"
     fi
 fi
 
 # ════════════════════════════════════════════════════════════════════════════
-# Step 4 — Wire GitHub Actions secrets
+# Step 5 — Wire GitHub Actions secrets
 # ════════════════════════════════════════════════════════════════════════════
 
-info "[4] Setting GitHub Actions secrets on ${GH_REPO}"
+info "[5] Setting GitHub Actions secrets on ${GH_REPO}"
 if $DRY_RUN; then
     echo "  [dry-run] gh secret set CF_PAGES_API_TOKEN  --repo ${GH_REPO}"
     echo "  [dry-run] gh secret set CF_PAGES_ACCOUNT_ID --repo ${GH_REPO}"
 else
     gh secret set CF_PAGES_API_TOKEN  --repo "${GH_REPO}" --body "${CI_TOKEN_VALUE}"
     gh secret set CF_PAGES_ACCOUNT_ID --repo "${GH_REPO}" --body "${CF_ACCOUNT_ID}"
-    ok "[4] GitHub secrets set"
+    ok "[5] GitHub secrets set"
     gh secret list --repo "${GH_REPO}"
 fi
 

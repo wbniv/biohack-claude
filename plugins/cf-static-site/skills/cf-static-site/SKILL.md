@@ -8,14 +8,16 @@ version: 2.4.0
 
 Two paths — choose before starting:
 
-| | Path 1 — Astro + Workers | Path 2 — Static HTML + Pages |
+| | Path 1 — Astro + Workers | Path 2 — Astro + Pages |
 |---|---|---|
-| **When to use** | Full production site, SSR, CSP nonce, scroll animations | Placeholder or early-stage site before design is decided |
-| **Framework** | Astro | None (raw HTML) |
+| **When to use** | Full production site, SSR, CSP nonce, scroll animations | Simpler hosting — design undecided or AWS/Terraform not needed |
+| **Framework** | Astro + Tailwind 4 + `@theme` tokens | Astro + Tailwind 4 + `@theme` tokens (same scaffold) |
 | **Hosting** | Cloudflare Workers | Cloudflare Pages |
 | **Infra** | Terraform (bootstrap → global → iam-self) | `scripts/bootstrap-site.sh` only |
 | **Secrets** | AWS SSM | GitHub Actions secrets (no AWS) |
-| **Deploy** | `wrangler deploy` | `wrangler pages deploy site/` |
+| **Deploy** | `wrangler deploy` | `astro build` → `wrangler pages deploy dist/` |
+
+Both paths always use Astro + Tailwind 4 + `@theme` palette tokens. The choice is about *infra complexity*, not frontend framework. "Design undecided" means scaffold with neutral/greyscale palette tokens and fill in brand colors later — it does not mean skip the framework.
 
 For **Path 1**, continue with Phase A below.
 For **Path 2**, jump directly to the [Pages path](#pages-path-plain-static-html) section.
@@ -57,7 +59,7 @@ Derive these additional values from the inputs before starting:
 | `<GH_USER>/<DOMAIN>` | `wbniv/worldfoundry.org` | input 5 |
 | `<ACCOUNT_ID>` | `abc123…` (32-char hex) | output of `cloudflare-domain-setup` (Phase A) |
 | `<ZONE_ID>` | `def456…` (32-char hex) | output of `cloudflare-domain-setup` (Phase A) |
-| `<PROJECT_NAME>` | `foundrylinux-org` | slug with `.` replaced by `-` (Pages project name) |
+| `<PROJECT_NAME>` | `foundrylinux-org` | domain with `.` replaced by `-` (Pages project name, operator token base name) |
 | `<GH_ORG>` | `foundry-linux` | GitHub org or username |
 | `<GH_REPO>` | `foundrylinux.org` | GitHub repo name (often same as `<DOMAIN>`) |
 
@@ -230,7 +232,10 @@ Use this path for placeholder or early-stage sites, OR to migrate an existing st
 5. Branch         — production branch (default: main; use master for older repos)
 ```
 
-Derive: `<PROJECT_NAME>` = domain with `.` → `-`, e.g. `foundrylinux-org`.
+Derive:
+- `<PROJECT_NAME>` = domain with `.` → `-`, e.g. `biohack.net` → `biohack-net`
+- Operator token name = `<PROJECT_NAME>-operator`, e.g. `biohack-net-operator`
+- CI token name = `<PROJECT_NAME>-site-ci`, e.g. `biohack-net-site-ci`
 
 **Existing repo variant:** If the repo already has content (not a fresh bootstrap),
 skip Step 2 (placeholder page) and set deploy dir to `.` (root) unless content
@@ -248,11 +253,24 @@ Just run:
 bash scripts/bootstrap-site.sh
 ```
 
-Required token permissions: `Zone | DNS | Edit` (all zones), `Account | Cloudflare Pages | Edit`.
+Required token permissions (all five):
+
+| Category | Subcategory         | Permission | Scope        |
+|----------|---------------------|------------|--------------|
+| Zone     | Zone                | Read       | All zones    |
+| Zone     | DNS                 | Edit       | All zones    |
+| Zone     | Page Rules          | Edit       | All zones    |
+| Account  | Cloudflare Pages    | Edit       | Your account |
+| User     | API Tokens          | Edit       | (no scope)   |
+
+`User | API Tokens` is in the **User** section of the Cloudflare token UI (not Account).
+This lets the script auto-create the scoped CI deploy token.
+
 Account ID is derived from the zone — no `Account Settings Read` needed.
 
-The operator token **must** include `Account | Pages Write`. `bootstrap-site.sh`
-checks for this and exits 1 with instructions if the permission is missing.
+`bootstrap-site.sh` runs preflight permission checks before any destructive step and
+exits 1 with instructions if any permission is missing; it also clears the cached token
+so the user is re-prompted on the next run.
 
 ### Step 1 — Bootstrap (`templates/scripts/bootstrap-site.sh`)
 
@@ -267,31 +285,46 @@ This:
 0. Removes any Cloudflare Page Rules that redirect `<DOMAIN>` to `www.<DOMAIN>`
    (stale rules from previous hosting prevent Pages from taking over the apex)
 1. Creates the Cloudflare Pages project (`<PROJECT_NAME>`)
-2. Removes old A records pointing at previous hosts; creates proxied CNAME apex → Pages
-3. Attaches `<DOMAIN>` as a custom domain
-4. Creates a `Cloudflare Pages:Edit`-scoped CI token (`<SLUG>-site-ci`); falls back to manual prompt if permission lookup fails
+2. Removes old A/AAAA records at both apex and `www.<DOMAIN>`; creates proxied CNAMEs
+   for both pointing at `<PROJECT_NAME>.pages.dev`
+3. Attaches both `<DOMAIN>` and `www.<DOMAIN>` as custom domains to the Pages project.
+   **Note:** Pages does NOT auto-redirect www→apex — both domains serve the site
+   independently. Add a Cloudflare Redirect Rule if you want www to 301 to apex.
+4. Creates a `Cloudflare Pages:Edit`-scoped CI token (`<PROJECT_NAME>-site-ci`); falls back to manual prompt if permission lookup fails
 5. Wires `CF_PAGES_API_TOKEN` and `CF_PAGES_ACCOUNT_ID` into GitHub Actions secrets
 
-### Step 2 — Placeholder page (`templates/site/index.html`)
+### Step 2 — Astro scaffold
 
-**Skip this step for existing repos.** For new/empty repos only:
+Path 2 uses the same Astro + Tailwind 4 frontend as Path 1. Copy and substitute these templates (same as Path 1 Phase F, minus the Worker):
 
-Read `templates/site/index.html`, substitute `<DOMAIN>`, write to `site/index.html`.
+| Template | Destination |
+|----------|-------------|
+| `templates/package.json` | `package.json` |
+| `templates/astro.config.mjs` | `astro.config.mjs` (remove Workers vite plugin if present) |
+| `templates/tsconfig.json` | `tsconfig.json` |
+| `templates/pnpm-workspace.yaml` | `pnpm-workspace.yaml` |
+| `templates/src/styles/global.css` | `src/styles/global.css` |
+| `templates/src/layouts/Base.astro` | `src/layouts/Base.astro` |
+| `templates/src/pages/index.astro` | `src/pages/index.astro` |
+| `templates/src/pages/404.astro` | `src/pages/404.astro` |
+
+Create `.nvmrc` with `24`.
+
+If design is undecided: leave `@theme` tokens with neutral/greyscale values and a `TODO: replace with brand colors` comment. Do **not** use plain HTML as a shortcut.
+
+Install: `pnpm install`
 
 ### Step 3 — Deploy workflow (`templates/.github/workflows/deploy-static.yml`)
 
 Read `templates/.github/workflows/deploy-static.yml`, substitute `<PROJECT_NAME>`
-and `<BRANCH>`, write to `.github/workflows/site-deploy.yml` (or `deploy.yml` if
-no other deploy exists).
+and `<BRANCH>`, write to `.github/workflows/site-deploy.yml` (or `deploy.yml`).
 
-Set `DEPLOY_DIR` in the workflow env if not using `site/` (e.g. `.` for root).
+Deploy dir is always `dist/` (Astro build output).
 
 ### Step 4 — First deploy
 
-Tag and push:
 ```sh
-git add ${DEPLOY_DIR} .github/workflows/ scripts/bootstrap-site.sh
-git commit -m "feat: Cloudflare Pages hosting for <DOMAIN>"
+git add . && git commit -m "feat: Cloudflare Pages hosting for <DOMAIN>"
 git tag v0.1.0 && git push origin <BRANCH> v0.1.0
 ```
 
