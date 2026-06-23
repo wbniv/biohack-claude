@@ -43,7 +43,6 @@ CATEGORIES_ORDER = [
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
     ("broken-hook-paths", "Hook/Taskfile commands referencing missing scripts"),
-    ("hook-checksum-drift", "Hook checksum drift (manifest vs live python-tui-lib)"),
     ("uncommitted",    "Uncommitted/untracked `.claude/` changes"),
     ("orphan-plans",   "Orphan plans in `~/.claude/plans/`"),
     ("dup-memories",   "Cross-project duplicate memories"),
@@ -100,7 +99,6 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
     "config-drift":      "Per-project settings.json entries that duplicate hooks already fired globally.",
     "broken-hook-paths": "Hook commands in global or per-project settings.json — plus `md`/other task commands in `~/Taskfile.yml` and `~/SRC/*/Taskfile.yml` — whose referenced `.sh` script doesn't exist on disk after expansion. Catches stale paths left after a python-tui-lib rename (e.g. `md-to-pdf.sh` → `md-to-html.sh`) or env-var typos.",
-    "hook-checksum-drift": "Entries in `~/.claude/hook-checksums.json` whose recorded sha256 no longer matches the live `~/SRC/python-tui-lib/hooks/*.sh` — a hook changed (uncommitted edit or a pull) without regenerating the manifest, so hook-runner.sh refuses to run it. Remediate via the runbook (audit diff → regen → verify).",
     "uncommitted":       "Modified or untracked Claude artifacts (skills, commands, memory, hooks, settings) sitting uncommitted in the homedir repo or any project repo — surfaces in-flight work that didn't get a commit.",
     "orphan-plans":      "Markdown files in `~/.claude/plans/` older than the threshold (default 1 day) that look like real plans worth routing.",
     "dup-memories":      "Same-filename `feedback_*.md` across ≥3 real project memory dirs (worktrees excluded) — candidates for promotion to global.",
@@ -140,8 +138,6 @@ class Project:
     def skills_dir(self) -> Path:     return self.claude_dir / "skills"
     @property
     def docs_plans_dir(self) -> Path: return self.path / "docs" / "plans"
-    @property
-    def hook_runner(self) -> Path:    return self.claude_dir / "hook-runner.sh"
 
 
 @dataclass
@@ -184,13 +180,12 @@ def active(projects: list[Project]) -> list[Project]:
 
 
 def _normalize_hook_cmd(cmd: str) -> str:
-    """Strip variable preludes so direct-path vs hook-runner.sh forms compare equal.
+    """Reduce a hook command to the trailing script's basename.
 
-    The trailing token may be a bare basename (`md-preview.sh`, as in the
-    hook-runner form `bash $HOME/.claude/hook-runner.sh md-preview.sh`) or a
-    full path (`bash $HOME/python-tui-lib/hooks/md-preview.sh`). Both should
-    reduce to `md-preview.sh` so config-drift can detect them as the same
-    hook regardless of invocation form.
+    The trailing token may be a bare basename (`md-preview.sh`) or a full
+    path (`bash $HOME/SRC/python-tui-lib/hooks/md-preview.sh`). Both reduce
+    to `md-preview.sh` so the baseline/config-drift scans match a hook by
+    name regardless of how its path is written.
     """
     m = re.search(r"(\S+\.sh)\s*$", cmd.strip())
     if not m:
@@ -410,64 +405,6 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
             "cp -a $HOME/.claude/settings.json /tmp/settings.json.bak-$(date +%Y%m%d-%H%M)\n"
             "${EDITOR:-vi} $HOME/.claude/settings.json\n"
             "jq . $HOME/.claude/settings.json > /dev/null && echo 'valid JSON'"
-        ),
-        severity="warn",
-    )]
-
-
-def scan_hook_checksum_drift() -> list[Recommendation]:
-    """The global ~/.claude/hook-checksums.json manifest should match the live
-    python-tui-lib hooks. A mismatch means a hook changed (uncommitted edit, or a
-    python-tui-lib pull) without the manifest being regenerated — hook-runner.sh
-    then refuses to run that hook until the manifest is refreshed."""
-    manifest = GLOBAL_CLAUDE / "hook-checksums.json"
-    hooks_dir = HOME / "SRC" / "python-tui-lib" / "hooks"
-    if not manifest.is_file() or not hooks_dir.is_dir():
-        return []   # no checksum wrapper in use, or the hooks lib is absent
-    try:
-        recorded = json.loads(manifest.read_text())
-    except Exception as e:
-        return [Recommendation(
-            category="hook-checksum-drift",
-            title="hook-checksums.json is unparseable JSON",
-            details=f"Error: `{e}`",
-            command_block=f"# Hand-fix {manifest}, or regenerate it (see the runbook).",
-            severity="regress",
-        )]
-
-    rows = []
-    for name, rec_sha in sorted(recorded.items()):
-        live = hooks_dir / name
-        if not live.is_file():
-            rows.append((name, "missing on disk", "❌"))
-        elif sha256_of(live) != rec_sha:
-            rows.append((name, "live ≠ manifest", "⚠️"))
-    if not rows:
-        return []
-
-    table = "| Hook | State | |\n|---|---|---|\n" + \
-            "\n".join(f"| `{n}` | {s} | {m} |" for n, s, m in rows)
-    runbook = GLOBAL_CLAUDE / "skills" / "claude-housekeeping" / "runbooks" / "hook-checksum-remediation.md"
-    return [Recommendation(
-        category="hook-checksum-drift",
-        title=f"Hook checksum drift: {len(rows)} hook(s) out of sync with the manifest",
-        details=(
-            f"{table}\n\n"
-            "`hook-runner.sh` verifies each hook's sha256 against "
-            "`~/.claude/hook-checksums.json` and refuses to run a hook whose live "
-            f"content drifted. **Runbook**: [`{runbook.name}`](file://{runbook}). "
-            "**Audit the python-tui-lib diff before regenerating** — the regen trusts "
-            "whatever is on disk."
-        ),
-        command_block=(
-            "# 1. Audit what changed in the shared hooks (do NOT blindly trust):\n"
-            "git -C $HOME/SRC/python-tui-lib status --short hooks/\n"
-            "git -C $HOME/SRC/python-tui-lib diff hooks/\n"
-            "# 2. If the change is intended/benign, regenerate the global manifest:\n"
-            "bash $HOME/SRC/python-tui-lib/scripts/regen-hook-checksums.sh --global\n"
-            "# 3. Verify a drifted hook now matches (live == recorded):\n"
-            "#   sha256sum $HOME/SRC/python-tui-lib/hooks/<name>.sh\n"
-            "#   jq -r '.\"<name>.sh\"' $HOME/.claude/hook-checksums.json"
         ),
         severity="warn",
     )]
@@ -1147,9 +1084,8 @@ def scan_broken_hook_paths(projects: list[Project]) -> list[Recommendation]:
     .sh script doesn't exist on disk after env-var expansion.
 
     Logic: for each settings.json, walk every hook command, extract any
-    whitespace-separated `.sh` tokens that contain `/` (so the bare
-    `md-preview.sh` arg to `hook-runner.sh` is skipped — that arg is
-    resolved internally by the runner, not as a filesystem path),
+    whitespace-separated `.sh` tokens that contain `/` (a bare basename
+    with no `/` is a wrapper arg, not a filesystem path, so it's skipped),
     expand env vars, and flag tokens that resolve to a missing file.
     Tokens with unresolved vars after expansion are skipped (we'd be
     guessing)."""
@@ -1175,7 +1111,7 @@ def scan_broken_hook_paths(projects: list[Project]) -> list[Recommendation]:
                         continue
                     for tok in re.findall(r"\S+\.sh", cmd):
                         if "/" not in tok:
-                            continue  # bare arg name (e.g. hook-runner.sh's arg)
+                            continue  # bare basename, not a filesystem path
                         # Skip regex/pattern fragments inside a quoted grep/test
                         # (e.g. grep -qE "…/build\.sh$") — not an executed path.
                         if tok[0] in "\"'" or "\\" in tok or ".+" in tok or ".*" in tok:
@@ -1814,8 +1750,6 @@ def render_state_table(projects: list[Project]) -> str:
     # Per-project rows
     for p in projects:
         settings_marker = present(p.settings_json)
-        if settings_marker == "✅" and p.hook_runner.is_file():
-            settings_marker = "✅ (hr)"
         mem = memory_split(p.memory_dir)
         rows.append([
             p.name,
@@ -1919,23 +1853,18 @@ def _render_box_table(headers: list[str], rows: list[list[str]]) -> str:
 
 def render_mermaid_dependency(projects: list[Project]) -> str:
     """Only emit nodes for projects that diverge from the uniform baseline:
-    missing settings.json, OR shipping their own hook-runner. Boring nodes
-    (project has settings.json + no hook-runner) get suppressed entirely —
-    the full state is in the merged table above.
+    missing settings.json. Boring nodes (project has settings.json) get
+    suppressed entirely — the full state is in the merged table above.
     """
     no_settings = [p for p in projects if not p.settings_json.is_file()]
-    uses_hr     = [p for p in projects if p.hook_runner.is_file()]
 
-    if not no_settings and not uses_hr:
+    if not no_settings:
         return ""
 
     lines = ["```mermaid", "graph LR"]
     lines.append("    PTL[python-tui-lib]")
     lines.append("    GLOBAL[~/.claude<br/>global]")
     lines.append("    PTL ==> GLOBAL")
-    for p in uses_hr:
-        nid = _mermaid_id(p.name)
-        lines.append(f"    GLOBAL -.-> {nid}[{p.name}<br/>+hook-runner]")
     for p in no_settings:
         nid = _mermaid_id(p.name)
         lines.append(f"    GLOBAL -.->|no settings.json| {nid}[{p.name}]")
@@ -2142,7 +2071,7 @@ def build_report(
     # ── Projects + state (merged) ─────────────────────────────────────
     P.append("## Projects and state")
     P.append("")
-    P.append("Legend: ✅ present · ❌ missing · — n/a · `(hr)` = project's own hook-runner.sh wrapper. "
+    P.append("Legend: ✅ present · ❌ missing · — n/a. "
              "`MEMORY` = `MEMORY.md` present · `fb` = count of `feedback_*.md` files. "
              '<span style="opacity:0.45">Dormant projects are greyed out</span>; scans skip them unless `--include-dormant`.')
     P.append("")
@@ -2170,8 +2099,6 @@ def build_report(
         name_inner = f"[{p.name}]({repo})" if repo else p.name
 
         settings_marker = present(p.settings_json)
-        if settings_marker == "✅" and p.hook_runner.is_file():
-            settings_marker = "✅ (hr)"
         mem = memory_split(p.memory_dir)
         cells = [
             name_inner,
@@ -2532,7 +2459,6 @@ def main() -> int:
     recs.extend(scan_missing_project_settings(scan_set))
     recs.extend(scan_config_drift(scan_set))
     recs.extend(scan_broken_hook_paths(scan_set))
-    recs.extend(scan_hook_checksum_drift())
     recs.extend(scan_uncommitted_claude_changes(scan_set))
     recs.extend(scan_orphan_plans(args.threshold_days))
     recs.extend(scan_duplicate_memories(scan_set))
