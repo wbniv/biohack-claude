@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generate biohack.net/claude/index.html from this marketplace.
-# Reads .claude-plugin/marketplace.json + each plugin's plugin.json.
-# Writes to ~/SRC/biohack-net/claude/index.html (creates the directory if needed).
+# Regenerate the plugin-card sections of biohack.net's /claude/ page
+# (src/pages/claude.astro) from this marketplace's plugins.
+#
+# It rewrites ONLY the region between these two markers in claude.astro:
+#   <!-- @generated:plugin-cards start ... -->
+#   <!-- @generated:plugin-cards end -->
+# leaving the hand-authored styles, header, featured card, and footer intact.
+#
+# For each LOCAL, non-featured plugin it emits a styled card matching the page:
+#   <div class="plugin"> name / description / install / source-link </div>
+# grouped by category. Card order within a category is preserved from the
+# existing page (curated); any new plugins are appended alphabetically.
+# Source link -> the plugin's skills/<name>/SKILL.md if present, else the tree.
+#
+# Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/SRC/biohack.net).
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIOHACK_NET="${BIOHACK_NET_DIR:-${HOME}/SRC/biohack.net}"
-OUT_DIR="${BIOHACK_NET}/claude"
-OUT_FILE="${OUT_DIR}/index.html"
+ASTRO="${BIOHACK_NET}/src/pages/claude.astro"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [-h|--help]
 
-Generate ${OUT_FILE} from this marketplace.
+Regenerate the plugin-card sections of ${ASTRO}
+from .claude-plugin/marketplace.json + each plugin's plugin.json.
 
-Set BIOHACK_NET_DIR to override the default output path (~/SRC/biohack-net).
+Only the region between the @generated:plugin-cards markers is rewritten;
+the hand-authored styles, header, featured card, and footer are left alone.
+
+Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/SRC/biohack.net).
 EOF
   exit 0
 }
@@ -27,140 +42,110 @@ for arg in "$@"; do
   esac
 done
 
-if [[ ! -d "$BIOHACK_NET" ]]; then
-  echo "error: biohack-net dir not found at ${BIOHACK_NET}" >&2
-  echo "       set BIOHACK_NET_DIR to override" >&2
-  exit 1
-fi
+command -v python3 &>/dev/null || { echo "error: python3 required" >&2; exit 1; }
+[[ -f "$ASTRO" ]] || { echo "error: ${ASTRO} not found (set BIOHACK_NET_DIR)" >&2; exit 1; }
 
-mkdir -p "$OUT_DIR"
+REPO_ROOT="$REPO_ROOT" ASTRO="$ASTRO" python3 - <<'PYEOF'
+import json, os, re, html, sys
 
-python3 - << PYEOF
-import json, os, html, sys
-from collections import defaultdict
+repo  = os.environ["REPO_ROOT"]
+astro = os.environ["ASTRO"]
 
-repo = "${REPO_ROOT}"
-out  = "${OUT_FILE}"
+START = "<!-- @generated:plugin-cards start"
+END   = "<!-- @generated:plugin-cards end -->"
 
+GITHUB = "https://github.com/wbniv/biohack-claude"
+CATEGORY_GLYPH = {"techops": "⚒", "design": "✦", "meta": "⬡", "personal": "◆"}
+CATEGORY_ORDER = ["techops", "design", "meta", "personal"]
+
+# ── gather local, non-featured plugins from the marketplace ─────────────────
 with open(os.path.join(repo, ".claude-plugin", "marketplace.json")) as f:
     mp = json.load(f)
 
-# Build per-category plugin list, enriching from plugin.json where available
-by_category = defaultdict(list)
+plugins = []
 for entry in mp["plugins"]:
-    cat = entry.get("category", "other")
-    pdir = entry.get("source", "").lstrip("./")
-    pj_path = os.path.join(repo, pdir, ".claude-plugin", "plugin.json")
-    extra = {}
+    src = entry.get("source")
+    if not (isinstance(src, str) and src.startswith("./plugins/")):
+        continue                                  # skip vendored / external
+    name = entry["name"]
+    pj = {}
+    pj_path = os.path.join(repo, src.lstrip("./"), ".claude-plugin", "plugin.json")
     if os.path.isfile(pj_path):
         with open(pj_path) as f:
-            extra = json.load(f)
-    by_category[cat].append({
-        "name": entry["name"],
-        "description": extra.get("description") or entry.get("description", ""),
+            pj = json.load(f)
+    if pj.get("featured"):
+        continue                                  # owned by the hand-authored featured section
+    skill = os.path.join(repo, "plugins", name, "skills", name, "SKILL.md")
+    source = (f"{GITHUB}/blob/main/plugins/{name}/skills/{name}/SKILL.md"
+              if os.path.isfile(skill)
+              else f"{GITHUB}/tree/main/plugins/{name}")
+    plugins.append({
+        "name": name,
+        "desc": pj.get("description") or entry.get("description", ""),
+        "cat":  pj.get("category")    or entry.get("category", "other"),
+        "source": source,
     })
 
-# TYPE_META glyphs for known categories
-CATEGORY_META = {
-    "techops": {"glyph": "⚒", "label": "techops"},
-    "design":  {"glyph": "✦", "label": "design"},
-    "personal":{"glyph": "◆", "label": "personal"},
-}
+# ── locate the generated region in claude.astro ─────────────────────────────
+with open(astro) as f:
+    page = f.read()
 
-INSTALL_BLOCK = """<pre class="install"><code>/plugin marketplace add wbniv/biohack-claude
-/plugin install {name}@biohack-claude</code></pre>"""
+si, ei = page.find(START), page.find(END)
+if si == -1 or ei == -1:
+    sys.exit(f"error: @generated:plugin-cards markers not found in {astro}\n"
+             f"       add '    {START} ... -->' and '    {END}'\n"
+             f"       around the plugin-card <section> blocks, then re-run.")
+region_start = page.index("\n", si) + 1            # just after the start-marker line
+region_end   = page.rfind("\n", 0, ei) + 1         # just before the end-marker line
+old_region   = page[region_start:region_end]
 
-def render_category(cat, plugins):
-    meta = CATEGORY_META.get(cat, {"glyph": "▸", "label": cat})
-    g = meta["glyph"]
-    label = meta["label"]
-    rows = ""
-    for p in plugins:
-        name_esc = html.escape(p["name"])
-        desc_esc = html.escape(p["description"])
-        install = INSTALL_BLOCK.format(name=name_esc)
-        rows += f"""
-      <div class="plugin">
-        <h3>{name_esc}</h3>
-        <p>{desc_esc}</p>
-        {install}
-      </div>"""
-    return f"""
-    <section class="category" id="{html.escape(cat)}">
-      <h2>{g} {label}</h2>
-      {rows}
-    </section>"""
+# preserve curated order: existing plugin-name order within the region
+existing = re.findall(r'class="plugin-name">([^<]+)<', old_region)
+order = {n: i for i, n in enumerate(existing)}
 
-sections = ""
-# Render techops first, then rest alphabetically
-order = ["techops"] + sorted(k for k in by_category if k != "techops")
-for cat in order:
-    if cat in by_category:
-        sections += render_category(cat, by_category[cat])
+def esc(s):
+    return html.escape(s, quote=False)
 
-# GNOME extensions section
-gnome_ext_path = os.path.join(repo, "gnome", "extensions.json")
-gnome_section = ""
-if os.path.isfile(gnome_ext_path):
-    with open(gnome_ext_path) as f:
-        gnome_exts = json.load(f)
-    rows = ""
-    for ext in gnome_exts:
-        name_esc = html.escape(ext["name"])
-        desc_esc = html.escape(ext["description"])
-        repo_url = html.escape(ext.get("repo", ""))
-        repo_link = f'<a href="{repo_url}">{repo_url.replace("https://github.com/", "")}</a>' if repo_url else ""
-        uuid_esc  = html.escape(ext.get("uuid", ""))
-        clone_dir = repo_url.split("/")[-1]
-        install = f"""<pre class="install"><code>git clone {repo_url}
-ln -s \$PWD/{clone_dir}/gnome-extension \\
-  ~/.local/share/gnome-shell/extensions/{uuid_esc}
-gnome-extensions enable {uuid_esc}</code></pre>"""
-        rows += f"""
-      <div class="plugin">
-        <h3>{name_esc}</h3>
-        <p>{desc_esc}</p>
-        {install}
-      </div>"""
-    gnome_section = f"""
-    <section class="category" id="gnome">
-      <h2>🐚 GNOME extensions</h2>
-      {rows}
-    </section>"""
+def card(p):
+    return (
+        '        <div class="plugin">\n'
+        f'          <p class="plugin-name">{esc(p["name"])}</p>\n'
+        f'          <p class="plugin-desc">{esc(p["desc"])}</p>\n'
+        f'          <pre>/plugin install {esc(p["name"])}@biohack-claude</pre>\n'
+        f'          <a class="source-link" href="{esc(p["source"])}" target="_blank" rel="noopener">source</a>\n'
+        '        </div>'
+    )
 
-page = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Claude plugins — biohack.net</title>
-  <style>
-    body {{ font-family: monospace; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }}
-    h1 {{ font-size: 1.4rem; border-bottom: 1px solid #ccc; padding-bottom: .5rem; }}
-    h2 {{ font-size: 1.1rem; margin-top: 2rem; color: #555; }}
-    h3 {{ font-size: 1rem; margin-bottom: .25rem; }}
-    .plugin {{ margin: 1.5rem 0; padding-left: 1rem; border-left: 3px solid #eee; }}
-    pre.install {{ background: #f5f5f5; padding: .75rem 1rem; border-radius: 4px; overflow-x: auto; margin-top: .5rem; }}
-    pre.install code {{ font-size: .85rem; }}
-    a {{ color: inherit; }}
-  </style>
-</head>
-<body>
-  <h1>Claude plugins</h1>
-  <p>
-    Will's personal <a href="https://github.com/wbniv/biohack-claude">Claude Code marketplace</a>.
-    Install via:
-  </p>
-  <pre class="install"><code>/plugin marketplace add wbniv/biohack-claude</code></pre>
-  {sections}
-  {gnome_section}
-</body>
-</html>
-"""
+def section(cat, members):
+    cards = "\n\n".join(card(p) for p in members)
+    return (
+        f'    <section class="category" id="{esc(cat)}">\n'
+        f'      <h2>{CATEGORY_GLYPH.get(cat, "▸")} {esc(cat)}</h2>\n'
+        '      <div class="plugin-grid">\n\n'
+        f'{cards}\n\n'
+        '      </div>\n'
+        '    </section>'
+    )
 
-with open(out, "w") as f:
-    f.write(page)
-print(f"wrote {out}")
-for cat, plugins in by_category.items():
-    print(f"  {cat}: {len(plugins)} plugin(s)")
+cats = CATEGORY_ORDER + sorted({p["cat"] for p in plugins} - set(CATEGORY_ORDER))
+sections = []
+for cat in cats:
+    members = sorted((p for p in plugins if p["cat"] == cat),
+                     key=lambda p: (order.get(p["name"], len(existing)), p["name"]))
+    if members:
+        sections.append(section(cat, members))
+
+new_region = "\n\n".join(sections) + "\n"
+new_page = page[:region_start] + new_region + page[region_end:]
+
+if new_page == page:
+    print(f"{astro} already up to date")
+else:
+    with open(astro, "w") as f:
+        f.write(new_page)
+    print(f"updated {astro}")
+for cat in cats:
+    n = sum(1 for p in plugins if p["cat"] == cat)
+    if n:
+        print(f"  {cat}: {n} card(s)")
 PYEOF

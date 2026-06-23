@@ -1,6 +1,6 @@
 {
   "name": "statusline",
-  "description": "Two-line Claude Code status line — account · model · effort · cwd/branch on line 1; context bar, 5h/7d rate-limit bars with reset countdown, and session cost on line 2. Ships a one-shot installer that wires it into your settings and self-removes.",
+  "description": "Two-line status line — account, model, effort, and cwd/branch up top; context, 5h/7d rate-limit bars with reset countdown, and session cost below. One-shot installer wires it into your settings and self-removes.",
   "category": "personal",
   "author": {
     "name": "Will Norris",

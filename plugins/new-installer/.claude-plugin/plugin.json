@@ -1,6 +1,6 @@
 {
   "name": "new-installer",
-  "description": "Scaffold a new one-shot self-removing installer command for the biohack-claude marketplace.",
+  "description": "Scaffold a one-shot self-removing installer command — for any marketplace plugin or as a standalone slash command. Verify, install, vanish.",
   "category": "meta",
   "author": {
     "name": "Will Norris",

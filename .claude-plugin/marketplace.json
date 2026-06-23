@@ -89,7 +89,7 @@
     },
     {
       "name": "new-installer",
-      "description": "Scaffold a new one-shot self-removing installer command for the biohack-claude marketplace.",
+      "description": "Scaffold a one-shot self-removing installer command \u2014 for any marketplace plugin or as a standalone slash command. Verify, install, vanish.",
       "author": {
         "name": "Will Norris",
         "url": "https://biohack.net"
@@ -119,7 +119,7 @@
     },
     {
       "name": "statusline",
-      "description": "Two-line Claude Code status line \u2014 account \u00b7 model \u00b7 effort \u00b7 cwd/branch on line 1; context bar, 5h/7d rate-limit bars with reset countdown, and session cost on line 2. Ships a one-shot installer that wires it into your settings and self-removes.",
+      "description": "Two-line status line \u2014 account, model, effort, and cwd/branch up top; context, 5h/7d rate-limit bars with reset countdown, and session cost below. One-shot installer wires it into your settings and self-removes.",
       "author": {
         "name": "Will Norris",
         "url": "https://biohack.net"

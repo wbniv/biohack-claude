@@ -22,13 +22,11 @@ tasks:
       - bash scripts/check-marketplace.sh
 
   publish-site:
-    desc: Generate biohack.net/claude/index.html and open for review
+    desc: Regenerate the /claude/ plugin cards in the biohack.net Astro page
     cmds:
       - bash scripts/gen-biohack-skills-page.sh
-      - task md -- {{.BIOHACK_NET_DIR | default (printf "%s/SRC/biohack.net" .HOME)}}/claude/index.html
-    vars:
-      HOME:
-        sh: echo $HOME
+      - cmd: echo "Next → cd ~/SRC/biohack.net && task check-source-links && pnpm build, then commit and push a v* tag to deploy."
+        silent: true
 
   install-local:
     desc: Install this marketplace locally for dogfooding

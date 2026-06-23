@@ -89,6 +89,6 @@ workflow. See [docs/plans/](docs/plans/) when that plan is written.
 ```bash
 task sync            # pull memories + settings from ~/.claude/
 task gen-marketplace # regenerate marketplace.json after plugin changes
-task publish-site    # generate biohack.net/claude/index.html
+task publish-site    # regenerate the /claude/ plugin cards in biohack.net's Astro page
 task install-local   # install this marketplace locally for dogfooding
 ```
