@@ -118,6 +118,16 @@
       "source": "./plugins/package"
     },
     {
+      "name": "statusline",
+      "description": "Two-line Claude Code status line \u2014 account \u00b7 model \u00b7 effort \u00b7 cwd/branch on line 1; context bar, 5h/7d rate-limit bars with reset countdown, and session cost on line 2. Ships a one-shot installer that wires it into your settings and self-removes.",
+      "author": {
+        "name": "Will Norris",
+        "url": "https://biohack.net"
+      },
+      "category": "personal",
+      "source": "./plugins/statusline"
+    },
+    {
       "name": "aws-cost-optimization",
       "description": "AWS cost / FinOps workflows \u2014 find waste, rightsize, evaluate Reserved Instances vs Savings Plans, migrate to Graviton, and run monthly cost reviews.",
       "author": {

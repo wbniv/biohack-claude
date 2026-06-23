@@ -48,6 +48,12 @@ Then install any plugin individually:
 |--------|-------------|
 | [`install-gnome-usage`](plugins/install-gnome-usage/) | One-shot installer for the [Claude Usage Indicator](https://github.com/wbniv/claude-usage) — shows Claude.ai weekly usage % in the GNOME top panel. Self-removes after install. |
 
+## ▬ status line
+
+| Plugin | What it does |
+|--------|-------------|
+| [`statusline`](plugins/statusline/) | Two-line status line — account · model · effort · cwd/branch, plus context, 5h/7d rate-limit bars, reset countdown, and session cost. One-shot installer wires it into your settings and self-removes. |
+
 ## ◆ personal (biohack-shell)
 
 [`biohack-shell`](plugins/biohack-shell/) bundles the tab-colour hooks and slash

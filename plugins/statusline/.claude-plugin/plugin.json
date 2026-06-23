@@ -1,0 +1,9 @@
+{
+  "name": "statusline",
+  "description": "Two-line Claude Code status line — account · model · effort · cwd/branch on line 1; context bar, 5h/7d rate-limit bars with reset countdown, and session cost on line 2. Ships a one-shot installer that wires it into your settings and self-removes.",
+  "category": "personal",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}

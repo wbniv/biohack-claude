@@ -1,0 +1,166 @@
+#! /usr/bin/env bash
+
+set -o pipefail
+set -o errexit
+set -o nounset
+
+# ---------------------------------------------------------------------------
+# Claude Code status line script.
+# Reads the JSON context object from stdin; prints two status lines:
+#   Line 1: [account] • model • effort • ~/cwd (branch)
+#   Line 2: ctx ▬▬▬─ 38% • 5h ▬▬▬▬ 73% ↺2h15m • 7d ▬─── 23%
+# ---------------------------------------------------------------------------
+
+_input=$(cat)
+
+_bold=$'\033[1m'
+_dim=$'\033[2m'
+_reset=$'\033[0m'
+_cyan=$'\033[36m'
+_yellow=$'\033[33m'
+_green=$'\033[32m'
+_red=$'\033[31m'
+_magenta=$'\033[35m'
+_blue=$'\033[34m'
+_sep=" ${_blue}⏺${_reset} "
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+effort_colored() {
+  case "${1:-}" in
+    low)    printf '%s%s%s' "$_green"             "low"   "$_reset" ;;
+    medium) printf '%s%s%s' "$_yellow"            "med"   "$_reset" ;;
+    high)   printf '%s%s%s' "$_red"               "high"  "$_reset" ;;
+    xhigh)  printf '%s%s%s' "${_bold}${_red}"     "xhigh" "$_reset" ;;
+    max)    printf '%s%s%s' "${_bold}${_magenta}" "MAX"   "$_reset" ;;
+    *)      printf '%s' "${1:-}" ;;
+  esac
+}
+
+usage_bar() {
+  local _pct="${1:-0}" _width=8
+  _pct="${_pct%.*}"
+  local _filled=$(( (_pct * _width + 50) / 100 ))
+  local _bar="" _i
+
+  for (( _i = 0; _i < _width; _i++ )); do
+    if (( _i < _filled )); then _bar+="▬"; else _bar+="─"; fi
+  done
+
+  local _color="$_green"
+  (( _pct >= 50 )) && _color="$_yellow"
+  (( _pct >= 80 )) && _color="$_red"
+
+  printf '%s%s%s %d%%' "$_color" "$_bar" "$_reset" "$_pct"
+}
+
+resets_in() {
+  local _ms="${1:-}"
+  [[ -z "$_ms" || "$_ms" == "null" ]] && return
+  local _now _secs _remaining _h _m
+  _now=$(date +%s)
+  # auto-detect: values > 1e12 are milliseconds, otherwise seconds
+  if (( _ms > 1000000000000 )); then
+    _secs=$(( _ms / 1000 ))
+  else
+    _secs=$_ms
+  fi
+  _remaining=$(( _secs - _now ))
+  (( _remaining <= 0 )) && printf 'now' && return
+  _h=$(( _remaining / 3600 ))
+  _m=$(( (_remaining % 3600) / 60 ))
+  (( _h > 0 )) && printf '%dh%02dm' "$_h" "$_m" || printf '%dm' "$_m"
+}
+
+join_parts() {
+  local _out="" _part
+  for _part in "$@"; do
+    [[ -n "$_out" ]] && _out+="$_sep"
+    _out+="$_part"
+  done
+  printf '%s' "$_out"
+}
+
+
+# ---------------------------------------------------------------------------
+# Extract data from JSON
+# ---------------------------------------------------------------------------
+_model=$(      jq -r '.model.display_name                    // ""' <<< "$_input")
+_cwd=$(        jq -r '.workspace.current_dir                 // ""' <<< "$_input")
+_effort=$(     jq -r '.effort.level                          // ""' <<< "$_input")
+_ctx_pct=$(    jq -r '.context_window.used_percentage        // ""' <<< "$_input")
+_rate_5h_pct=$(jq -r '.rate_limits.five_hour.used_percentage // ""' <<< "$_input")
+_rate_5h_at=$( jq -r '.rate_limits.five_hour.resets_at      // ""' <<< "$_input")
+_rate_7d_pct=$(jq -r '.rate_limits.seven_day.used_percentage // ""' <<< "$_input")
+_cost=$(      jq -r '.cost.total_cost_usd                    // ""' <<< "$_input")
+
+# Account name from CLAUDE_CONFIG_DIR (set by claude-account wrapper)
+_account=""
+[[ -n "${CLAUDE_CONFIG_DIR:-}" ]] && _account="${CLAUDE_CONFIG_DIR##*/}"
+
+# Git branch + working-tree state
+_branch=""
+_git_state=""
+if [[ -n "$_cwd" ]]; then
+  _branch=$(git -C "$_cwd" branch --show-current 2>/dev/null || true)
+  if [[ -n "$_branch" ]]; then
+    _dirty=$(git -C "$_cwd" status --porcelain 2>/dev/null | wc -l | tr -d ' ' || true)
+    (( _dirty > 0 )) && _git_state+=" ${_red}±${_dirty}${_reset}"
+    # left-right count of @{u}...HEAD → "<behind>\t<ahead>"
+    _ab=$(git -C "$_cwd" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null || true)
+    if [[ -n "$_ab" ]]; then
+      _behind=${_ab%%[[:space:]]*}
+      _ahead=${_ab##*[[:space:]]}
+      (( _ahead  > 0 )) && _git_state+=" ${_green}↑${_ahead}${_reset}"
+      (( _behind > 0 )) && _git_state+=" ${_yellow}↓${_behind}${_reset}"
+    fi
+  fi
+fi
+
+# Collapse $HOME to ~
+_display_cwd="${_cwd/#$HOME/\~}"
+
+
+# ---------------------------------------------------------------------------
+# Line 1: [account] • model • effort • ~/cwd (branch)
+# ---------------------------------------------------------------------------
+_line1_parts=()
+
+[[ -n "$_account" ]] && _line1_parts+=("${_bold}${_cyan}[${_account}]${_reset}")
+[[ -n "$_model"   ]] && _line1_parts+=("${_dim}${_model}${_reset}")
+[[ -n "$_effort"  ]] && _line1_parts+=("$(effort_colored "$_effort")")
+
+_loc="$_display_cwd"
+[[ -n "$_branch"    ]] && _loc+=" ${_yellow}(${_branch})${_reset}"
+[[ -n "$_git_state" ]] && _loc+="$_git_state"
+[[ -n "$_loc"       ]] && _line1_parts+=("$_loc")
+
+printf '%s' "$(join_parts "${_line1_parts[@]}")"
+
+
+# ---------------------------------------------------------------------------
+# Line 2: ctx ▬▬▬─ 38% • 5h ▬▬▬▬ 73% ↺2h15m • 7d ▬─── 23%
+# ---------------------------------------------------------------------------
+_line2_parts=()
+
+[[ -n "$_ctx_pct" ]] && _line2_parts+=("${_dim}ctx${_reset} $(usage_bar "$_ctx_pct")")
+
+if [[ -n "$_rate_5h_pct" ]]; then
+  _reset_str=$(resets_in "$_rate_5h_at")
+  _entry="${_dim}5h${_reset} $(usage_bar "$_rate_5h_pct")"
+  [[ -n "$_reset_str" ]] && _entry+=" ${_dim}↺${_reset_str}${_reset}"
+  _line2_parts+=("$_entry")
+fi
+
+[[ -n "$_rate_7d_pct" ]] && _line2_parts+=("${_dim}7d${_reset} $(usage_bar "$_rate_7d_pct")")
+
+if [[ -n "$_cost" && "$_cost" != "null" ]]; then
+  _cost_fmt=$(printf '%.2f' "$_cost" 2>/dev/null || printf '%s' "$_cost")
+  _line2_parts+=("${_green}\$${_cost_fmt}${_reset}")
+fi
+
+if (( ${#_line2_parts[@]} > 0 )); then
+  printf '\n%s' "$(join_parts "${_line2_parts[@]}")"
+fi
