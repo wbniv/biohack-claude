@@ -39,7 +39,7 @@ tasks:
   md:
     desc: Render a markdown file to HTML and open in browser
     cmds:
-      - bash {{.HOME}}/SRC/python-tui-lib/scripts/md-to-pdf.sh {{.CLI_ARGS}}
+      - bash {{.HOME}}/SRC/python-tui-lib/scripts/md-to-html.sh {{.CLI_ARGS}}
     vars:
       HOME:
         sh: echo $HOME
