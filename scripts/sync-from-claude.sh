@@ -47,7 +47,7 @@ if [[ -d "$GLOBAL_SRC" ]]; then
   mkdir -p "$MEMORIES_GLOBAL"
   EXCL=()
   if [[ -f "$SHAREIGNORE" ]]; then
-    while IFS= read -r line || true; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
       [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
       EXCL+=(--exclude="$line")
     done < "$SHAREIGNORE"
@@ -72,7 +72,7 @@ for proj_dir in "${CLAUDE_DIR}/projects/"-home-will-SRC-*/; do
     mkdir -p "$dest"
     EXCL=()
     if [[ -f "$SHAREIGNORE" ]]; then
-      while IFS= read -r line || true; do
+      while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
         EXCL+=(--exclude="$line")
       done < "$SHAREIGNORE"
