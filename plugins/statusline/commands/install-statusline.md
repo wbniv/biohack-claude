@@ -11,9 +11,10 @@ fails, stop and report the error to the user rather than continuing.
    changes on every update, so we copy out of it rather than point at it:
    ```bash
    set -euo pipefail
+   CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
    SRC="${CLAUDE_PLUGIN_ROOT:-}/bin/claude-status"
    if [ ! -f "$SRC" ]; then
-     SRC=$(find "$HOME/.claude/plugins" -path '*statusline*/bin/claude-status' -type f 2>/dev/null | head -n1 || true)
+     SRC=$(find "$CFG/plugins" "$HOME/.claude/plugins" -path '*statusline*/bin/claude-status' -type f 2>/dev/null | head -n1 || true)
    fi
    [ -n "$SRC" ] && [ -f "$SRC" ] || { echo "could not locate the bundled claude-status script" >&2; exit 1; }
    mkdir -p "$HOME/.local/bin"
@@ -26,12 +27,15 @@ fails, stop and report the error to the user rather than continuing.
    command -v jq >/dev/null || { echo "jq is required (e.g. sudo apt install jq)"; exit 1; }
    ```
 
-3. Wire it into your user settings (`~/.claude/settings.json`), backing up first.
-   We write an **absolute** path so a future plugin update can never break it:
+3. Wire it into your active user settings, backing up first. Honour
+   `CLAUDE_CONFIG_DIR` — when it's set, Claude reads settings from there, not from
+   `~/.claude`, so writing to the wrong file would silently do nothing. We write an
+   **absolute** path so a future plugin update can never break it:
    ```bash
    set -euo pipefail
-   SETTINGS="$HOME/.claude/settings.json"
-   mkdir -p "$HOME/.claude"
+   CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+   SETTINGS="$CFG/settings.json"
+   mkdir -p "$CFG"
    [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
    cp "$SETTINGS" "$SETTINGS.bak.$(date -u +%Y%m%dT%H%M%SZ)"
    tmp=$(mktemp)
@@ -54,5 +58,6 @@ fails, stop and report the error to the user rather than continuing.
    ```
 
 Tell the user the status line is live, that the script was installed to
-`~/.local/bin/claude-status`, that their previous settings were backed up to
-`~/.claude/settings.json.bak.*`, and that this installer has removed itself.
+`~/.local/bin/claude-status`, that their previous settings were backed up
+alongside the settings file (`$SETTINGS.bak.*`, under `$CLAUDE_CONFIG_DIR` when
+set, otherwise `~/.claude/`), and that this installer has removed itself.
