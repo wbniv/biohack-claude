@@ -1,5 +1,6 @@
 ---
 name: user-profile
+applies-to: [universal]
 description: Will's role, setup, and preferences for desktop/dev workflow customization
 type: user
 ---

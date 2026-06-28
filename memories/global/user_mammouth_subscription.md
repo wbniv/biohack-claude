@@ -1,5 +1,6 @@
 ---
 name: Mammouth.ai subscription
+applies-to: [universal]
 description: Will has a €20/month Mammouth.ai Standard subscription — multi-model aggregator (GPT-4o, Claude, Gemini, Mistral, Llama) with OpenAI-compatible API
 type: user
 originSessionId: 1bfdb885-7712-4e4e-a9d6-25a9d6d4bd67

@@ -1,5 +1,6 @@
 ---
 name: feedback-prefer-proper-fix
+applies-to: [universal]
 description: "When choosing between fix scopes, default to the proper/architectural solution — don't anchor on the minimal/targeted option."
 metadata: 
   node_type: memory

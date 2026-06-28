@@ -1,5 +1,6 @@
 ---
 name: Default lower on Bangkok cost estimates
+applies-to: [bkk]
 description: When estimating Bangkok prices/rents/fees, default to local-market norms not Western/expat-tier; verify against Lalamove/Grab/local norms before stating ranges
 type: feedback
 originSessionId: ca6fcf8a-b5b7-46b9-be6e-7203e8a06dee

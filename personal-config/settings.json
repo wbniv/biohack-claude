@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CONFIG_DIR": "/home/will/.config/claude/will"
+  },
   "permissions": {
     "allow": [
       "Bash",
@@ -28,7 +31,7 @@
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh session-clear-md-flags.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/session-clear-md-flags.sh",
             "timeout": 2
           }
         ]
@@ -48,7 +51,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh todo-reminder.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/todo-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-stop.sh",
             "timeout": 5
           }
         ]
@@ -68,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh transcript-logger.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-logger.sh",
             "timeout": 5
           }
         ]
@@ -80,22 +92,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh commit-checklist.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/commit-checklist.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh tf-blocker.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/tf-blocker.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh sleep-blocker.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/sleep-blocker.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh git-add-guard.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/git-add-guard.sh",
             "timeout": 5
           }
         ]
@@ -105,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh plan-first.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-first.sh",
             "timeout": 5
           }
         ]
@@ -117,7 +129,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh plan-migrate.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-migrate.sh",
             "timeout": 10
           }
         ]
@@ -127,7 +139,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh md-preview.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/md-preview.sh",
             "timeout": 30
           }
         ]
@@ -137,26 +149,44 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh py-syntax.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/py-syntax.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hook-runner.sh shell-strict.sh",
+            "command": "bash $HOME/SRC/python-tui-lib/hooks/shell-strict.sh",
             "timeout": 5
           }
         ]
       }
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "bash /home/will/.claude/statusline-command.sh"
-  },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": false
+    "superpowers@claude-plugins-official": false,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "aws-billing-tags@biohack-claude": true,
+    "biohack-shell@biohack-claude": true,
+    "cf-domain-setup@biohack-claude": true,
+    "cf-static-site@biohack-claude": true,
+    "claude-housekeeping@biohack-claude": true,
+    "iam-bootstrap@biohack-claude": true,
+    "import-claude-design@biohack-claude": true,
+    "install-gnome-usage@biohack-claude": true,
+    "new-installer@biohack-claude": true,
+    "new-web-apt-repo@biohack-claude": true,
+    "package@biohack-claude": true
+  },
+  "extraKnownMarketplaces": {
+    "biohack-claude": {
+      "source": {
+        "source": "github",
+        "repo": "wbniv/biohack-claude"
+      }
+    }
   },
   "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "theme": "auto",
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": false,
   "skipAutoPermissionPrompt": true,

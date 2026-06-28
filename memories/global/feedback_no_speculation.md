@@ -1,5 +1,6 @@
 ---
 name: Don't speculate when you can verify — including claims about state
+applies-to: [universal]
 description: Verify before asserting. Will pushes back on guessed/checklist advice AND on declarative claims about state ("X hasn't run", "Y doesn't exist") that weren't checked first
 type: feedback
 originSessionId: 5f3d331f-3710-4959-a1e2-30f676253f92

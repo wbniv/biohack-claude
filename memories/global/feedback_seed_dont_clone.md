@@ -1,5 +1,6 @@
 ---
 name: feedback-seed-dont-clone
+applies-to: [web]
 description: "When seeding a new site from an existing one, swapping the wordmark + accent color isn't enough — the visual fingerprint of the source carries through. Plan and execute the distinctive elements, don't defer them."
 metadata: 
   node_type: memory

@@ -1,5 +1,6 @@
 ---
 name: Prefer hand-rolled over integration libs when Will already does the manual pattern
+applies-to: [universal]
 description: When Will has built the manual version of a pattern across multiple projects, don't oversell integration-lib convenience; default to the hand-rolled version
 type: feedback
 originSessionId: c911fa94-81a4-4d65-856d-a010059f407c

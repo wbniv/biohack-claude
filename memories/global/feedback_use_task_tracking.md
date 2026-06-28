@@ -1,5 +1,6 @@
 ---
 name: Use task tracking proactively
+applies-to: [universal]
 description: User has flagged a recurring pattern of ignoring TaskCreate/TaskUpdate; reach for it on multi-step work without being prompted
 type: feedback
 originSessionId: 7a75d2d6-3cbc-48c2-b163-993638e3b490

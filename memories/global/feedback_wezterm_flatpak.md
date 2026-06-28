@@ -1,5 +1,6 @@
 ---
 name: wezterm-flatpak-cli
+applies-to: [desktop]
 description: How to interact with WezTerm Flatpak GUI tabs from outside the sandbox
 type: feedback
 ---

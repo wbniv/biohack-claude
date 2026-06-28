@@ -1,5 +1,6 @@
 ---
 name: Don't broaden commit scope beyond what was asked
+applies-to: [universal]
 description: When the user says "commit X" or "commit the others," resolve the scope from the conversation's most recent enumeration — not from git status sweeping
 type: feedback
 originSessionId: 7a75d2d6-3cbc-48c2-b163-993638e3b490

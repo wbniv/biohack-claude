@@ -1,5 +1,6 @@
 ---
 name: Excluded providers (Facebook, Oracle)
+applies-to: [universal]
 description: Do not recommend Facebook/Meta (except WhatsApp) or Oracle as providers in free-services.md, infra plans, or tooling suggestions
 type: feedback
 originSessionId: 93c3cd37-f623-4e0c-8a7e-5750c1e68482

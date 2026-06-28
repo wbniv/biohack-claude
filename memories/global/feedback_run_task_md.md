@@ -1,5 +1,6 @@
 ---
 name: Run task md on markdown files
+applies-to: [universal]
 description: After writing or editing any .md file, run task md to convert it to HTML and open in browser
 type: feedback
 originSessionId: 0f72211e-7e22-41ec-933b-0cee31cca321

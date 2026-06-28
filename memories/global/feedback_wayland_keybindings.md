@@ -1,5 +1,6 @@
 ---
 name: wayland-keybinding-architecture
+applies-to: [desktop]
 description: How Ctrl+Shift+Left/Right tab switching works across Chrome, WezTerm, and Ptyxis on GNOME Wayland
 type: feedback
 ---

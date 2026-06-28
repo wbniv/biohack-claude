@@ -1,6 +1,7 @@
 ---
 name: feedback-md-renderer-no-autolinks
-description: "Always link external references in markdown — products, libraries, frameworks, fonts, websites, people, places. Bare names are a recurring blind spot. Use `[label](url)` form, never `<url>` shorthand (md-to-pdf.sh silently drops it)."
+applies-to: [universal]
+description: "Always link external references in markdown — products, libraries, frameworks, fonts, websites, people, places. Bare names are a recurring blind spot. Prefer `[label](url)` form for readable link text (md-to-html.sh now autolinks bare + `<url>` forms as of 2026-06-13, but labels still beat raw URLs)."
 metadata:
   node_type: memory
   type: feedback
@@ -20,7 +21,9 @@ metadata:
 
 If it's a URL, link it. If it's a name that maps to a URL, link it with that URL. **Bare names or URLs in plain text are a defect.**
 
-Use **`[label](url)`** form. Never use **`<https://…>`** shorthand: the shared `~/SRC/python-tui-lib/scripts/md-to-pdf.sh` regex (`re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)`) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. `clerk.com` linking to `https://clerk.com` or `localhost:4321/colophon` linking to `http://localhost:4321/colophon`), still write it as `[label](url)`.
+Prefer **`[label](url)`** form so the link text is a human-readable label, not a raw URL. As of 2026-06-13 `md-to-html.sh` *does* autolink both bare `https://…` URLs and `<https://…>` angle-bracket autolinks (it no longer silently drops them — see the `_autolink_bare_url` pass in `scripts/md-to-html.sh` and the `test_bare_url_*` regression tests), so a naked URL will render clickable. But a bare URL as link *text* is still worse UX than a label: write `[clerk.com](https://clerk.com)`, not `https://clerk.com`. The renderer fix is a safety net for this recurring blind spot, **not** a license to drop labels.
+
+(Historical note: the old failure this memory was written against — `<url>` shorthand rendering as a blank — is fixed, and bare URLs are now linked too. The authoring discipline below still stands.)
 
 # Why this gets its own loud memory
 
@@ -29,8 +32,9 @@ This is a **recurring blind spot** Will has called out repeatedly:
 - The original `<url>` autolinks failure (twice in indri.studio, flagged session `a2f3a3df`).
 - Inert product names in the colophon-route plan (2026-05-13): wrote `Astro 6`, `Tailwind CSS v4`, `Cloudflare Workers`, `Terraform`, `AWS SSM`, `GitHub Actions`, `pnpm`, `Space Grotesk`, `Inter`, `Material Symbols Outlined`, `Hoox`, `clerk.com`, `droneland.au` — every single one a bare name pointing at a real external thing, none linked. Will: *"this really is a blind spot for you. i do have to remind you to do it all the fucking time."*
 - **Same plan, verification section** (2026-05-13, same day, after rewriting this memory): `localhost:4321` and `localhost:4321/colophon` in code-backticks rather than as links; no production URL mentioned at all. Will: *"it's funny that you don't have a link to the prod url in verification."* I had narrowed the rule in my head to "third-party products"; it applies equally to dev URLs and production URLs.
+- **Cross-references to sibling docs** (2026-05-28): wrote "The 2026-05-22 manual package inventory documents…" in a plan with no link to the actual file. Also wrote `apt.foundrylinux.org` as bare text. Will: *"links links links links links / why do you never remember?"* The rule applies to sibling docs and investigation files referenced by name just as much as to external URLs.
 
-Each failure is a different surface (paragraph autolinks → list of products → references → docs → local dev/prod URLs), but the underlying mistake is identical: I treat anything-that-could-be-a-link as plain text instead of as a link.
+Each failure is a different surface (paragraph autolinks → list of products → references → docs → local dev/prod URLs → cross-repo doc references), but the underlying mistake is identical: I treat anything-that-could-be-a-link as plain text instead of as a link.
 
 # How to apply
 
@@ -44,6 +48,8 @@ Examples — left side wrong, right side right:
 - `clerk.com` → `[clerk.com](https://clerk.com)`
 - `Built with Hoox` → `Built with [Hoox](https://hoox-archive-or-similar.example)`
 - `Open <https://example.com/docs>` → `Open [example.com/docs](https://example.com/docs)`
+- `The 2026-05-22 manual package inventory documents…` → `The [2026-05-22 manual package inventory](../investigations/2026-05-22-package-inventory.manual.md) documents…`
+- `apt.foundrylinux.org currently shows…` → `[apt.foundrylinux.org](https://apt.foundrylinux.org) currently shows…`
 
 **Audit step**: before declaring a markdown file done, grep mentally (or actually) for the names of external products/sites in it. If any appear without surrounding `[…](…)`, that's a bug.
 

@@ -1,5 +1,6 @@
 ---
 name: feedback-public-vs-internal-surfaces
+applies-to: [web]
 description: "Public marketing pages (homepage, colophon, about) describe the visible artifact — never internal infrastructure (repo URLs, project predecessors, deploy pipeline, IaC paths)."
 metadata: 
   node_type: memory
