@@ -1,7 +1,7 @@
 # Config-root migration + making housekeeping detect it
 
 **Date:** 2026-07-14
-**Status:** in progress
+**Status:** done — all five steps landed; see [Outcome](#outcome)
 **Trigger:** Will asked "have we fully migrated the memory system to this new computer?" — the answer turned out to be no, and the gap was far wider than memory.
 
 ---
@@ -147,7 +147,66 @@ clean store gets copied; the scanner change is what makes the *next* swap self-c
 ## Verification
 
 - `scanner.py --report-only` completes (today: `TypeError`).
-- `legacy-config-root` reports the ~35 drifted artifacts before the port, zero after.
+- `legacy-root` reports the drifted artifacts before the port, zero after.
 - `unmirrored-memory` reports 3 before consolidation, zero after.
 - Memory file count is conserved across the consolidation (no store loses a file).
 - A fresh session sees the restored skills/commands and the per-project memory.
+
+## Outcome
+
+All verification gates met.
+
+| Scan | Before | After |
+|---|---|---|
+| scanner runs at all | `TypeError` | 70 recommendations ✅ |
+| `legacy-root` | 68 stranded artifacts | **0** ✅ |
+| `unmirrored-memory` | 3 projects | **0** ✅ |
+| `global-hooks` | 8 of 8 baseline missing | **0** ✅ |
+
+Reconnected: 13 skills, 3 commands, 28-file memory master; `settings.json`
+614 b → 5934 b (17 hooks, 14 keys, 13 permission rules, 14 plugins — the move had
+silently disabled 10 of 13).
+
+Memory consolidated with **nothing lost** — verified file-by-file against a backup,
+including content equality and index-entry preservation:
+
+| Project | Reachable before | After |
+|---|---|---|
+| gustos-colores | 10 | **46** |
+| monetization-platform | 6 | **24** |
+| wald3n.com | 7 | **28** |
+
+**Live confirmation mid-session:** the 13 skills and both commands reappeared in the
+session's skill list immediately after symlinking — Claude Code picked them up without a
+restart.
+
+### Bugs found along the way (each fixed)
+
+- `cmd_block_mirror_memory()` would have **clobbered each repo's `MEMORY.md`** with the
+  loader's shorter one, silently dropping every cascade entry. Caught by checking for
+  collisions before copying rather than trusting the generated block.
+- `_project_dir_slug()` slugged the unresolved path, so `~/SRC/<name>` compat symlinks
+  yielded `-home-will-SRC-foo` — matching no loader dir and reporting a **clean zero**.
+  This single bug hid all 3 unmirrored-memory findings.
+- `_repo_tracks_memory()` grepped for a literal `!.claude/memory/` instead of asking git;
+  repos that simply never ignore `.claude` were told to "add" a line they don't need.
+- Five copies of this skill exist on disk. I edited the wrong one first (the legacy-root
+  marketplace checkout); canonical is `~/biohack-claude`, and the *executing* copy is the
+  commit-keyed plugin cache.
+
+### Follow-ups (not done — deliberately out of scope)
+
+- **Restart Claude Code.** Hooks, permissions and statusLine are read at session start;
+  the plugin cache is keyed by commit (`6b49abca38f1` = pre-fix) and rebuilds on restart.
+  Until then the plugin still runs the stale scanner — the synced `~/.claude/skills/` copy
+  is current.
+- **`missing-cascade`: 33** — pre-existing, untouched. Global memories not yet symlinked
+  into each project.
+- **`~/.claude/skills/` duplicates ~8 plugins** (`billing-tags`≈`aws-billing-tags`,
+  `package`, `iam-bootstrap`, …). Both now load, as they did on the old machine. Worth a
+  deliberate pick-one pass, but that's a strategy call, not drift.
+- **`projects.json`** still declares `~/SRC/<name>` paths and
+  `global_artifacts_root: ~/.claude`. Both work (the SRC symlinks resolve; the scanner now
+  resolves paths itself), but they're stale declarations.
+- **Relocating the 317 tracked files into the live root** and retiring `~/.claude` — likely
+  where Claude Code is heading, but a large migration to run days before a hardware swap.
