@@ -141,6 +141,7 @@ PLANS_DIR = GLOBAL_CLAUDE / "plans"
 # Categories, in the order they appear in the report
 CATEGORIES_ORDER = [
     ("legacy-root",    "Global artifacts stranded in a legacy config root"),
+    ("missing-path",   "Registry entries whose path isn't on disk"),
     ("global-hooks",   "Global hook chain"),
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
@@ -166,6 +167,7 @@ CATEGORY_COLUMNS: dict[str, list[str]] = {
     "missing-settings":  ["#", "Project"],
     "config-drift":      ["#", "Project", "Duplicate hooks"],
     "legacy-root":       ["#", "Legacy root", "Artifact kinds", "Live root", "Stranded"],
+    "missing-path":      ["#", "Projects", "Declared under", "Found at `~/<name>`", "Absent"],
     "broken-hook-paths": ["#", "Scope", "Event / task", "Command", "Resolves to"],
     "uncommitted":       ["#", "Scope", "Status", "File"],
     "orphan-plans":      ["#", "File", "Size", "Age", "Action"],
@@ -187,6 +189,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
     "uncommitted":       "Scope `~` = homedir git repo (covers global `~/.claude/`); other scopes = each project's repo (covers `~/SRC/<project>/.claude/`). Run `cd <scope> && git status -- .claude/` to inspect.",
     "orphan-plans":      "Source: `~/.claude/plans/<file>`",
     "dup-memories":      "Per-project: `~/SRC/<project>/.claude/memory/<name>` — promote to `~/.claude/memory/<name>`",
+    "missing-path":      "Source: `projects.json` `path` field. For a project that exists at `~/<name>`, prefer a compat symlink (`ln -s ~/<name> ~/SRC/<name>`) over rewriting the registry — that's the established choice here. For one that isn't checked out on this machine, no action: it's a registry entry for another machine's clone.",
     "legacy-root":       "Live root = `$CLAUDE_CONFIG_DIR` (what Claude Code reads); legacy root = a pre-move config dir still on disk. Fix by reconnecting the artifact into the live root — symlink the dir (`ln -s <legacy>/<artifact> <live>/<artifact>`) when the legacy root is the version-controlled one, or merge the missing `settings.json` keys. Project-scoped `.claude/` is unaffected — it loads from the repo, which is why this drift hides.",
     "missing-cascade":   "Globals at `~/.claude/projects/-home-will/memory/<name>` → symlinks at `~/SRC/<project>/.claude/memory/<name>`. Apply via the recommendation's command block.",
     "leaked-project-memories": "Source: `~/.claude/memory/<name>` or `~/.claude/projects/-home-will/memory/<name>`. Destination: `~/SRC/<owner>/.claude/memory/<name>` as a real file (not a cascade symlink).",
@@ -199,6 +202,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
 # One-line description of what each scan looks for — surfaced in the
 # "What we scanned for" section of every report.
 SCAN_DESCRIPTIONS: dict[str, str] = {
+    "missing-path":      "Registry (`projects.json`) entries whose declared `path` isn't a directory on disk. Split into two cases: the project exists at `~/<name>` and only the declared path is stale (fixable — a compat symlink makes its memory reachable), or it isn't checked out here at all (nothing to do). Reported once, and these projects are excluded from every path-dependent scan so they can't manufacture phantom cascade drift.",
     "legacy-root":       "Claude Code reads its global config from $CLAUDE_CONFIG_DIR (live root). This finds global artifacts — skills, commands, memory, hooks, settings keys — that still sit in a pre-move root and are therefore no longer loaded at all. Catches a config-dir migration (e.g. ~/.claude → ~/.config/claude/<account>/) that silently left most of the config behind.",
     "global-hooks":      "Global ~/.claude/settings.json has the expected baseline hooks (transcript-logger, plan-first, plan-migrate, md-preview, etc.)",
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
@@ -285,6 +289,21 @@ def load_projects() -> list[Project]:
 
 def active(projects: list[Project]) -> list[Project]:
     return [p for p in projects if p.status != "dormant"]
+
+
+def on_disk(projects: list[Project]) -> list[Project]:
+    """Projects whose declared path actually exists.
+
+    Every path-dependent scan must filter through this. A registry entry pointing
+    at a missing dir has no `.claude/memory`, so the cascade scan reads *every*
+    global as "missing" and reports 19-23 confident findings about a directory
+    that isn't there — noise that buries the real ones. The registry is
+    deliberately left declaring `~/SRC/<name>` paths (see the `home_src_layout`
+    memory: "Don't recreate ~/SRC/<name> dirs or fabricate cascades for absent
+    projects"), so the scanner enforces that rather than trusting a reader to
+    remember it. `scan_missing_project_paths` reports these once instead.
+    """
+    return [p for p in projects if p.path.is_dir()]
 
 
 # ─── helpers ───────────────────────────────────────────────────────────
@@ -518,6 +537,68 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
             "jq . $HOME/.claude/settings.json > /dev/null && echo 'valid JSON'"
         ),
         severity="warn",
+    )]
+
+
+def scan_missing_project_paths(projects: list[Project]) -> list[Recommendation]:
+    """Registry entries pointing at a path that isn't on disk.
+
+    Two very different cases, and conflating them is why this looked like 21
+    findings instead of one:
+      * relocatable — the project is right there at `~/<name>`, only the declared
+        path is stale. Its memory store is real but unreachable, so every scan
+        that keys off the path silently misses it.
+      * absent — not checked out on this machine. Nothing to do; the entry is
+        for another machine's clone.
+    """
+    reloc: list[tuple[str, Path, Path]] = []
+    absent: list[str] = []
+    for p in projects:
+        if p.path.is_dir():
+            continue
+        alt = HOME / p.name
+        if alt.is_dir():
+            reloc.append((p.name, p.path, alt))
+        else:
+            absent.append(p.name)
+    if not reloc and not absent:
+        return []
+
+    details = []
+    if reloc:
+        rows = "\n".join(
+            f"| `{n}` | `{_tilde(dec)}` | `{_tilde(alt)}` | "
+            f"{len(list((alt / '.claude' / 'memory').glob('*.md'))) if (alt / '.claude' / 'memory').is_dir() else 0} |"
+            for n, dec, alt in reloc)
+        details.append(
+            "**Relocatable — the project is on disk, the declared path is stale.** Its memory "
+            "store is real but unreachable from the registry, so path-keyed scans miss it "
+            "entirely (they don't report it as broken; they report *nothing*).\n\n"
+            "| Project | Declared | Actually at | Memories stranded |\n|---|---|---|---|\n" + rows)
+    if absent:
+        details.append(
+            f"**Not checked out on this machine ({len(absent)})** — no action; these entries "
+            f"describe another machine's clones.\n\n"
+            + ", ".join(f"`{n}`" for n in sorted(absent)))
+
+    stranded = sum(len(list((a / ".claude" / "memory").glob("*.md")))
+                   for _, _, a in reloc if (a / ".claude" / "memory").is_dir())
+    return [Recommendation(
+        category="missing-path",
+        title=f"{len(reloc)} registry path(s) stale, {len(absent)} project(s) not on this machine",
+        details="\n\n".join(details),
+        row=[str(len(reloc) + len(absent)), "`~/SRC/`", str(len(reloc)), str(len(absent))],
+        command_block=(
+            "# Relocatable: compat symlink so the registry resolves (preferred here over\n"
+            "# rewriting projects.json — see the `home_src_layout` memory).\n"
+            + "\n".join(f'[ -e {shlex.quote(str(dec))} ] || ln -s {shlex.quote(str(alt))} {shlex.quote(str(dec))}'
+                        for _, dec, alt in reloc)
+            + (f"\n\n# Absent ({len(absent)}): nothing to do — not checked out here.\n"
+               if absent else "")
+            + "\n# Then re-run housekeeping: the stranded memory above becomes visible,\n"
+              "# and `missing-cascade` will report real numbers for these projects."
+        ) if reloc else "# No action: none of these are checked out on this machine.",
+        severity="warn" if reloc else "info",
     )]
 
 
@@ -2761,9 +2842,15 @@ def main() -> int:
 
     all_projects = load_projects()
     scan_set = all_projects if args.include_dormant else active(all_projects)
+    # Report absent paths once, then keep them out of every path-dependent scan —
+    # a registry entry for a dir that isn't there otherwise manufactures a full
+    # set of phantom findings (no memory dir => every global reads as "missing").
+    path_recs = scan_missing_project_paths(scan_set)
+    scan_set = on_disk(scan_set)
 
     recs: list[Recommendation] = []
     recs.extend(scan_legacy_config_root())
+    recs.extend(path_recs)
     recs.extend(scan_global_hooks_sanity())
     recs.extend(scan_missing_project_settings(scan_set))
     recs.extend(scan_config_drift(scan_set))
