@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -32,13 +33,114 @@ from pathlib import Path
 from typing import Optional
 
 HOME = Path(os.path.expanduser("~"))
-GLOBAL_CLAUDE = HOME / ".claude"
-PROJECTS_JSON = GLOBAL_CLAUDE / "projects.json"
+
+# ─── config roots ──────────────────────────────────────────────────────
+# Claude Code resolves its GLOBAL config from $CLAUDE_CONFIG_DIR, falling back
+# to ~/.claude. Project-scoped `.claude/` still loads from the repo either way —
+# that asymmetry is why a root move breaks global artifacts (skills, commands,
+# hooks, loader dirs) while project commands keep working, i.e. silently.
+#
+# GLOBAL_CLAUDE is the LIVE root: the one Claude Code actually reads today, and
+# the one every scan must judge against. LEGACY_ROOTS are pre-move roots that
+# still exist on disk and are now ignored by Claude Code — the `legacy-root`
+# scan diffs them against the live root so a config-dir migration is detected
+# instead of discovered by hand months later.
+
+
+def _resolve_live_root() -> Path:
+    env = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+    if env:
+        return Path(os.path.expanduser(env))
+    return HOME / ".claude"
+
+
+def _resolve_legacy_roots(live: Path) -> list[Path]:
+    """Known-conventional global roots that exist but aren't the live one."""
+    candidates = [HOME / ".claude"]
+    # Any ~/.config/claude/<account>/ sibling that isn't live (multi-account or
+    # a half-finished move in the other direction).
+    xdg = HOME / ".config" / "claude"
+    if xdg.is_dir():
+        candidates += [p for p in sorted(xdg.iterdir()) if p.is_dir()]
+    out, seen = [], {live.resolve()}
+    for c in candidates:
+        if not c.is_dir():
+            continue
+        r = c.resolve()
+        if r in seen:
+            continue
+        # Only a real config root, not an arbitrary dir.
+        if not any((c / m).exists() for m in ("settings.json", "projects", "skills", "commands")):
+            continue
+        seen.add(r)
+        out.append(c)
+    return out
+
+
+GLOBAL_CLAUDE = _resolve_live_root()          # the root Claude Code reads NOW
+LEGACY_ROOTS = _resolve_legacy_roots(GLOBAL_CLAUDE)
+
+
+def _tilde(p: Path) -> str:
+    """`/home/will/.claude` → `~/.claude` for report readability."""
+    s = str(p)
+    h = str(HOME)
+    return "~" + s[len(h):] if s == h or s.startswith(h + "/") else s
+
+
+def _resolve_global_subdir(name: str) -> Optional[Path]:
+    """A global artifact dir (`skills`, `commands`, `memory`, `hooks`), wherever
+    it currently lives: live root first, then any legacy root. Returns None if it
+    exists nowhere. Callers that judge *reachability* must use GLOBAL_CLAUDE
+    directly — this is for scans that need the content regardless of location."""
+    for root in [GLOBAL_CLAUDE, *LEGACY_ROOTS]:
+        d = root / name
+        if d.is_dir():
+            return d
+    return None
+
+
+def _plugin_source_roots() -> list[Path]:
+    """Dirs holding git-tracked plugin sources (`<root>/plugins/<name>/skills/…`).
+    Marketplace checkouts live under `<config_root>/plugins/marketplaces/<mkt>/plugins`;
+    a hand-cloned marketplace repo may also sit in the source tree."""
+    roots: list[Path] = []
+    for root in [GLOBAL_CLAUDE, *LEGACY_ROOTS]:
+        mkts = root / "plugins" / "marketplaces"
+        if mkts.is_dir():
+            roots += [m / "plugins" for m in sorted(mkts.iterdir()) if (m / "plugins").is_dir()]
+    for legacy in (HOME / "SRC" / "biohack-claude" / "plugins", HOME / "biohack-claude" / "plugins"):
+        if legacy.is_dir():
+            roots.append(legacy)
+    seen, out = set(), []
+    for r in roots:
+        rr = r.resolve()
+        if rr not in seen:
+            seen.add(rr)
+            out.append(r)
+    return out
+
+
+def _find_projects_json() -> Path:
+    """`projects.json` is Will's own registry, not a Claude Code artifact, so it
+    doesn't necessarily sit in the live root. Prefer the live root, then any
+    legacy root, then the conventional path."""
+    for root in [GLOBAL_CLAUDE, *LEGACY_ROOTS]:
+        p = root / "projects.json"
+        if p.is_file():
+            return p
+    return HOME / ".claude" / "projects.json"
+
+
+PROJECTS_JSON = _find_projects_json()
+# Reports/plans follow the live root so they survive alongside the config that
+# produced them.
 REPORTS_DIR = GLOBAL_CLAUDE / "housekeeping" / "reports"
 PLANS_DIR = GLOBAL_CLAUDE / "plans"
 
 # Categories, in the order they appear in the report
 CATEGORIES_ORDER = [
+    ("legacy-root",    "Global artifacts stranded in a legacy config root"),
     ("global-hooks",   "Global hook chain"),
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
@@ -63,6 +165,7 @@ CATEGORY_RANK = {k: i for i, (k, _) in enumerate(CATEGORIES_ORDER)}
 CATEGORY_COLUMNS: dict[str, list[str]] = {
     "missing-settings":  ["#", "Project"],
     "config-drift":      ["#", "Project", "Duplicate hooks"],
+    "legacy-root":       ["#", "Legacy root", "Artifact kinds", "Live root", "Stranded"],
     "broken-hook-paths": ["#", "Scope", "Event / task", "Command", "Resolves to"],
     "uncommitted":       ["#", "Scope", "Status", "File"],
     "orphan-plans":      ["#", "File", "Size", "Age", "Action"],
@@ -84,6 +187,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
     "uncommitted":       "Scope `~` = homedir git repo (covers global `~/.claude/`); other scopes = each project's repo (covers `~/SRC/<project>/.claude/`). Run `cd <scope> && git status -- .claude/` to inspect.",
     "orphan-plans":      "Source: `~/.claude/plans/<file>`",
     "dup-memories":      "Per-project: `~/SRC/<project>/.claude/memory/<name>` — promote to `~/.claude/memory/<name>`",
+    "legacy-root":       "Live root = `$CLAUDE_CONFIG_DIR` (what Claude Code reads); legacy root = a pre-move config dir still on disk. Fix by reconnecting the artifact into the live root — symlink the dir (`ln -s <legacy>/<artifact> <live>/<artifact>`) when the legacy root is the version-controlled one, or merge the missing `settings.json` keys. Project-scoped `.claude/` is unaffected — it loads from the repo, which is why this drift hides.",
     "missing-cascade":   "Globals at `~/.claude/projects/-home-will/memory/<name>` → symlinks at `~/SRC/<project>/.claude/memory/<name>`. Apply via the recommendation's command block.",
     "leaked-project-memories": "Source: `~/.claude/memory/<name>` or `~/.claude/projects/-home-will/memory/<name>`. Destination: `~/SRC/<owner>/.claude/memory/<name>` as a real file (not a cascade symlink).",
     "unmirrored-memory": "Loader dir `~/.claude/projects/<slug>/memory` should be a symlink → `~/SRC/<project>/.claude/memory`. Drift = it's a real dir (memory un-versioned in the project repo). Command block relocates it + symlinks back. Reference: llvm-mos-65816.",
@@ -95,6 +199,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
 # One-line description of what each scan looks for — surfaced in the
 # "What we scanned for" section of every report.
 SCAN_DESCRIPTIONS: dict[str, str] = {
+    "legacy-root":       "Claude Code reads its global config from $CLAUDE_CONFIG_DIR (live root). This finds global artifacts — skills, commands, memory, hooks, settings keys — that still sit in a pre-move root and are therefore no longer loaded at all. Catches a config-dir migration (e.g. ~/.claude → ~/.config/claude/<account>/) that silently left most of the config behind.",
     "global-hooks":      "Global ~/.claude/settings.json has the expected baseline hooks (transcript-logger, plan-first, plan-migrate, md-preview, etc.)",
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
     "config-drift":      "Per-project settings.json entries that duplicate hooks already fired globally.",
@@ -160,13 +265,19 @@ def load_projects() -> list[Project]:
     raw = json.loads(PROJECTS_JSON.read_text())
     out = []
     for entry in raw["projects"]:
+        if not entry.get("path"):
+            continue   # no local checkout (idea-stage or not-cloned) — nothing to scan
+        # Resolve: the registry may still declare `~/SRC/<name>` compat symlinks
+        # from the ~/SRC → ~/ move. Claude Code keys loader dirs off the real
+        # path, and generated commands should write to the real repo, not through
+        # a symlink that may not exist on the next machine.
         p = Project(
             name=entry["name"],
-            path=Path(os.path.expanduser(entry["path"])),
+            path=Path(os.path.expanduser(entry["path"])).resolve(),
             status=entry.get("status", "active"),
             notes=entry.get("notes", ""),
             summary=entry.get("summary", ""),
-            tags=list(entry.get("tags", [])),
+            tags=list(entry.get("code", {}).get("tags", [])),
         )
         out.append(p)
     return out
@@ -410,17 +521,167 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
     )]
 
 
+def _hook_commands(settings: Path) -> set[str]:
+    """Every hook command string in a settings.json (flattened across events)."""
+    try:
+        data = json.loads(settings.read_text())
+    except Exception:
+        return set()
+    out = set()
+    for matchers in (data.get("hooks") or {}).values():
+        for m in matchers:
+            for h in m.get("hooks", []):
+                cmd = h.get("command")
+                if cmd:
+                    out.add(cmd)
+    return out
+
+
+def _settings_keys(settings: Path) -> set[str]:
+    try:
+        return set(json.loads(settings.read_text()).keys())
+    except Exception:
+        return set()
+
+
+# Global artifacts Claude Code loads from the config root. Project-scoped
+# `.claude/` is deliberately excluded — it loads from the repo regardless of
+# where the global root is, so it never strands.
+_LEGACY_ROOT_DIR_ARTIFACTS = ("skills", "commands", "agents")
+
+
+def scan_legacy_config_root() -> list[Recommendation]:
+    """Config-root migration drift.
+
+    Claude Code resolves its GLOBAL config from $CLAUDE_CONFIG_DIR. When that
+    root moves (e.g. Claude Code's own ~/.claude → ~/.config/claude/<account>/
+    migration) an incomplete move leaves global artifacts in the old root, where
+    nothing reads them. It is close to invisible day-to-day: project-scoped
+    `.claude/` still loads from the repo, so project commands/skills keep
+    working while the global chain is silently gone.
+
+    Root-agnostic by construction — it compares whatever the live root is against
+    whatever legacy roots exist, so it keeps working across the *next* move too.
+    """
+    recs: list[Recommendation] = []
+    if not LEGACY_ROOTS:
+        return recs
+
+    for legacy in LEGACY_ROOTS:
+        rows: list[tuple[str, str, str, str]] = []
+
+        # 1. Whole artifact dirs present in the legacy root but not reachable live.
+        for art in _LEGACY_ROOT_DIR_ARTIFACTS:
+            ldir, vdir = legacy / art, GLOBAL_CLAUDE / art
+            if not ldir.is_dir():
+                continue
+            litems = {p.name for p in ldir.iterdir() if not p.name.startswith(".")}
+            vitems = {p.name for p in vdir.iterdir() if not p.name.startswith(".")} if vdir.is_dir() else set()
+            stranded = litems - vitems
+            if stranded:
+                rows.append((
+                    f"`{art}/`", str(len(litems)), str(len(vitems)) if vdir.exists() else "**absent**",
+                    f"**{len(stranded)}** — {', '.join(sorted(stranded)[:4])}"
+                    + (f", +{len(stranded) - 4} more" if len(stranded) > 4 else ""),
+                ))
+
+        # 2. The memory master: reachable live, or stranded?
+        lmem, vmem = legacy / "memory", GLOBAL_CLAUDE / "memory"
+        if lmem.is_dir() and not vmem.exists():
+            n = len([f for f in lmem.glob("*.md") if f.name != "MEMORY.md"])
+            rows.append((
+                "`memory/` (cascade master)", str(n), "**absent**",
+                f"**{n}** — cascade master unreachable from the live root",
+            ))
+
+        # 3. settings.json: keys and hook chain dropped by the move.
+        lset, vset = legacy / "settings.json", GLOBAL_CLAUDE / "settings.json"
+        if lset.is_file():
+            lk, vk = _settings_keys(lset), _settings_keys(vset)
+            lost_keys = lk - vk
+            if lost_keys:
+                rows.append((
+                    "`settings.json` keys", str(len(lk)), str(len(vk)),
+                    f"**{len(lost_keys)}** — {', '.join(sorted(lost_keys))}",
+                ))
+            lh, vh = _hook_commands(lset), _hook_commands(vset)
+            lost_hooks = lh - vh
+            if lost_hooks:
+                rows.append((
+                    "`settings.json` hook chain", str(len(lh)), str(len(vh)),
+                    f"**{len(lost_hooks)}** hooks no longer fire",
+                ))
+
+        if not rows:
+            continue
+
+        table = ("| Artifact | Legacy root | Live root | Stranded |\n|---|---|---|---|\n"
+                 + "\n".join(f"| {a} | {l} | {v} | {s} |" for a, l, v, s in rows))
+        total = sum(int(re.search(r"\*\*(\d+)\*\*", s).group(1)) for _, _, _, s in rows
+                    if re.search(r"\*\*(\d+)\*\*", s))
+        recs.append(Recommendation(
+            category="legacy-root",
+            title=f"Reconnect global artifacts stranded in {_tilde(legacy)}",
+            details=(
+                f"Live root (`$CLAUDE_CONFIG_DIR`): `{_tilde(GLOBAL_CLAUDE)}`\n\n"
+                f"Legacy root: `{_tilde(legacy)}` — still on disk, **no longer read by Claude Code**.\n\n"
+                f"{table}\n\n"
+                "Project-scoped `.claude/` in each repo is unaffected (it loads from the repo), "
+                "which is why this drift is easy to miss: project commands keep working while "
+                "the global chain is gone.\n\n"
+                "**Before moving anything, check which root is version-controlled** — reconnect "
+                "toward the tracked one (symlink the live root at the tracked dir) rather than "
+                "copying config into an untracked tree."
+            ),
+            row=[_tilde(legacy), str(len(rows)), _tilde(GLOBAL_CLAUDE), str(total)],
+            command_block=cmd_block_legacy_root(legacy, rows),
+            severity="regress",
+        ))
+    return recs
+
+
+def cmd_block_legacy_root(legacy: Path, rows: list[tuple[str, str, str, str]]) -> str:
+    lines = [
+        "# Inspect before acting — this is a config-root migration, not a tidy-up.",
+        f"LIVE={shlex.quote(str(GLOBAL_CLAUDE))}",
+        f"LEGACY={shlex.quote(str(legacy))}",
+        "",
+        "# 1. Which root is version-controlled? Reconnect toward the tracked one.",
+        'git -C "$HOME" ls-files "${LEGACY#$HOME/}" | wc -l    # tracked files in legacy root',
+        'git -C "$HOME" ls-files "${LIVE#$HOME/}"   | wc -l    # tracked files in live root',
+        "",
+        "# 2. Symlink each stranded artifact dir from the live root at the tracked original.",
+    ]
+    for art, _, _, _ in rows:
+        name = art.strip("`/").split("`")[0].rstrip("/")
+        if name in _LEGACY_ROOT_DIR_ARTIFACTS or name == "memory":
+            lines.append(f'[ -e "$LIVE/{name}" ] || ln -s "$LEGACY/{name}" "$LIVE/{name}"')
+    lines += [
+        "",
+        "# 3. settings.json cannot be a symlink (Claude Code rewrites it) — merge keys:",
+        '#    jq -s ".[1] * .[0]" "$LIVE/settings.json" "$LEGACY/settings.json" > /tmp/merged.json',
+        '#    (review /tmp/merged.json, then move it into place)',
+        "",
+        "# 4. Restart Claude Code, then re-run housekeeping to confirm `legacy-root` is clear.",
+    ]
+    return "\n".join(lines)
+
+
 def scan_skill_install_drift() -> list[Recommendation]:
     """Installed skills under ~/.claude/skills/ should match their git-tracked
     plugin source (the marketplace copy). Divergence means the live skill was
     edited in place, or the plugin is a stale publish — the two rot apart."""
-    skills_dir = GLOBAL_CLAUDE / "skills"
-    plugins_dir = HOME / "SRC" / "biohack-claude" / "plugins"
-    if not skills_dir.is_dir() or not plugins_dir.is_dir():
+    skills_dir = _resolve_global_subdir("skills")
+    plugin_roots = _plugin_source_roots()
+    if skills_dir is None or not plugin_roots:
         return []
     rows = []
     for inst in sorted(p for p in skills_dir.iterdir() if p.is_dir()):
-        src = next((c for c in plugins_dir.glob(f"*/skills/{inst.name}") if c.is_dir()), None)
+        src = next(
+            (c for root in plugin_roots
+             for c in root.glob(f"*/skills/{inst.name}") if c.is_dir()),
+            None,
+        )
         if src is None:
             continue
         diff = subprocess.run(
@@ -559,7 +820,20 @@ def scan_duplicate_memories(projects: list[Project]) -> list[Recommendation]:
     return recs
 
 
-GLOBAL_USER_MEMORY_DIR = GLOBAL_CLAUDE / "memory"
+def _resolve_global_memory_dir() -> Path:
+    """The cascade master store. Normally `<live_root>/memory`, but it may still
+    sit in a legacy root after a config-dir move (the live root can reach it via
+    a symlink, so the cascade keeps working and the move stays invisible). Fall
+    back rather than silently reporting zero cascade sources — a missing master
+    would make `missing-cascade` look clean when it's actually blind."""
+    for root in [GLOBAL_CLAUDE, *LEGACY_ROOTS]:
+        d = root / "memory"
+        if d.is_dir():
+            return d
+    return GLOBAL_CLAUDE / "memory"
+
+
+GLOBAL_USER_MEMORY_DIR = _resolve_global_memory_dir()
 # Legacy path retained for stale-symlink detection across not-yet-migrated projects.
 LEGACY_GLOBAL_USER_MEMORY_DIR = GLOBAL_CLAUDE / "projects" / "-home-will" / "memory"
 CASCADE_EXCLUDED_NAMES = {"MEMORY.md", "memory-visualization.md"}
@@ -755,16 +1029,40 @@ def scan_leaked_project_memories(projects: list[Project]) -> list[Recommendation
 
 
 def _project_dir_slug(path: Path) -> str:
-    """Claude's cwd-siloed auto-memory key: the project path with '/' and '.' -> '-'."""
+    """Claude's cwd-siloed auto-memory key: the project path with '/' and '.' -> '-'.
+
+    Resolve symlinks first: Claude Code keys the loader dir off the *real* cwd,
+    while projects.json may declare a compat path (`~/SRC/<name>` symlinks left
+    over from the ~/SRC → ~/ move). Slugging the unresolved path yields
+    `-home-will-SRC-foo` and silently matches nothing, which makes every
+    loader-dir scan report a clean zero.
+    """
+    try:
+        path = path.resolve()
+    except OSError:
+        pass
     return str(path).replace("/", "-").replace(".", "-")
 
 
 def _repo_tracks_memory(p: Project) -> bool:
-    """True if the project repo's .gitignore un-ignores .claude/memory/ (so memory is committable)."""
+    """True if the repo can actually commit `.claude/memory/` — i.e. git does not
+    ignore it.
+
+    Ask git, don't grep for one spelling. A repo that never ignores `.claude` at
+    all is perfectly committable and needs no `!.claude/memory/` line; matching on
+    that literal reports those repos as needing a fix they don't need, and misses
+    a repo that ignores memory via some other pattern.
+    """
+    target = p.memory_dir / "MEMORY.md"
     try:
-        return "!.claude/memory/" in (p.path / ".gitignore").read_text()
+        r = subprocess.run(
+            ["git", "-C", str(p.path), "check-ignore", "-q", str(target)],
+            capture_output=True,
+        )
     except OSError:
         return False
+    # 0 = ignored, 1 = not ignored (committable), 128 = not a repo / error
+    return r.returncode == 1
 
 
 def cmd_block_mirror_memory(p: Project, siloed: Path) -> str:
@@ -774,10 +1072,20 @@ cp -a {siloed} {siloed}.bak.$(date -u +%Y%m%dT%H%M%SZ)
 # pre-check: must currently be a real dir (not already a symlink)
 [ -L "{siloed}" ] && {{ echo "already a symlink — skip"; exit 0; }}
 # action: relocate into the project repo, wire .gitignore, replace the loader dir with a symlink.
-# (cp -a preserves real files as real and generic cascade symlinks as symlinks; the relative
-#  ../../../../.claude/memory targets still resolve — both locations are 4 levels below ~.)
+# MEMORY.md is EXCLUDED from the copy on purpose: both sides have one and they are
+# different documents — the loader's flat pointer list vs the repo's index (local
+# entries + the managed BEGIN/END GLOBAL cascade block). `cp -a` would clobber the
+# repo's index with the shorter loader one and silently drop every cascade entry.
+# Merge the loader's entries into the repo index's local section by hand, below.
+# (cp -a preserves real files as real and cascade symlinks as symlinks. Check any
+#  relative symlink targets survive: the loader dir's depth below ~ depends on the
+#  config root — `~/.claude/projects/<slug>/memory` is 4 deep, but
+#  `~/.config/claude/<account>/projects/<slug>/memory` is 6.)
 mkdir -p {repo}/.claude/memory
-cp -a {siloed}/. {repo}/.claude/memory/
+find {siloed} -maxdepth 1 -name '*.md' ! -name 'MEMORY.md' -exec cp -a {{}} {repo}/.claude/memory/ \\;
+# merge the two indexes (loader entries -> repo index's local section, above the
+# BEGIN GLOBAL marker), then remove the loader's MEMORY.md:
+#   diff {siloed}/MEMORY.md {repo}/.claude/memory/MEMORY.md
 grep -q '!.claude/memory/' {repo}/.gitignore 2>/dev/null || printf '\\n# Claude per-project memory\\n.claude/*\\n!.claude/memory/\\n' >> {repo}/.gitignore
 rm -rf {siloed}
 ln -s {repo}/.claude/memory {siloed}
@@ -2455,6 +2763,7 @@ def main() -> int:
     scan_set = all_projects if args.include_dormant else active(all_projects)
 
     recs: list[Recommendation] = []
+    recs.extend(scan_legacy_config_root())
     recs.extend(scan_global_hooks_sanity())
     recs.extend(scan_missing_project_settings(scan_set))
     recs.extend(scan_config_drift(scan_set))

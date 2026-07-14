@@ -69,9 +69,12 @@ def _load_project_tags(project_path: Path) -> set[str]:
         return set()
     rp = project_path.resolve()
     for entry in data.get("projects", []):
-        ep = Path(os.path.expanduser(entry.get("path", ""))).resolve()
+        raw_path = entry.get("path") or ""
+        if not raw_path:
+            continue   # no local checkout — can't match by path
+        ep = Path(os.path.expanduser(raw_path)).resolve()
         if ep == rp or entry.get("name") == project_path.name:
-            return set(entry.get("tags", []))
+            return set(entry.get("code", {}).get("tags", []))
     return set()
 
 

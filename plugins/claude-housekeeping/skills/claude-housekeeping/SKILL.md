@@ -32,13 +32,15 @@ If invoked via `/schedule` for an unattended cron run, the skill MUST stop after
 
 ## How to invoke from the model
 
-When the user types `/claude-housekeeping` (with any args), run the scanner directly — there is no wrapper script:
+When the user types `/claude-housekeeping` (with any args), run the scanner directly — there is no wrapper script. Invoke it from the plugin dir, which is where this skill actually executes from:
 
 ```bash
-python3 $HOME/.claude/skills/claude-housekeeping/scanner.py --report-only [args]
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/claude-housekeeping/scanner.py" --report-only [args]
 ```
 
-The scanner writes a markdown report to `~/.claude/housekeeping/reports/YYYY-MM-DD-HHMM.md` and prints the path on stdout. The model should `Read` the report file and surface a summary + numbered recommendations to the user.
+Do **not** hardcode `$HOME/.claude/skills/claude-housekeeping/scanner.py`. That path is a pre-XDG-migration location: Claude Code resolves global artifacts from `$CLAUDE_CONFIG_DIR`, so a copy sitting in `~/.claude/skills/` may be stale, unloaded, or absent. If `CLAUDE_PLUGIN_ROOT` is unset (running the skill outside a plugin context), fall back to the scanner next to this `SKILL.md`.
+
+The scanner writes a markdown report to `<live_root>/housekeeping/reports/YYYY-MM-DD-HHMM.md` (live root = `$CLAUDE_CONFIG_DIR`, falling back to `~/.claude`) and prints the path on stdout. The model should `Read` the report file and surface a summary + numbered recommendations to the user.
 
 **Interactive flow** (after reading the report):
 1. Surface the recommendation list to the user.
@@ -93,6 +95,13 @@ When invoked as `/claude-housekeeping --report-only --auto-reschedule` (i.e., fi
 
 ## What it scans for
 
+0. **Legacy config root** — global artifacts stranded where Claude Code no longer reads them.
+   - Claude Code resolves its **global** config from `$CLAUDE_CONFIG_DIR` (the *live root*), falling back to `~/.claude`. When that root moves — e.g. Claude Code's own `~/.claude` → `~/.config/claude/<account>/` XDG migration — an incomplete move leaves skills, commands, the memory master, `settings.json` keys, and the hook chain behind in the old root, loaded by nothing.
+   - **Why it hides:** project-scoped `.claude/` still loads from the repo, so project commands and per-project memory keep working while the entire global chain is silently gone. Everything *feels* mostly fine.
+   - Compares whatever the live root is against whatever legacy roots exist — deliberately root-agnostic, so it keeps catching the *next* move too.
+   - **Reconnect toward the version-controlled root.** On a homedir-repo setup the tracked tree is usually the legacy one (`~/.claude`), so the fix is to symlink the live root's `skills`/`commands`/`memory` at the tracked originals — **not** to copy config into an untracked tree, which would silently drop it from version control.
+   - `settings.json` can't be symlinked (Claude Code rewrites it) → merge the missing keys.
+
 1. **Orphan plans** in `~/.claude/plans/*.md` older than `--threshold-days` (default 1).
    - Skip `screenshots/`.
    - Recommend: route to a likely project's `docs/plans/` (content-sniffing for project signals), or delete if trivially-small / shipped-duplicate.
@@ -113,7 +122,7 @@ When invoked as `/claude-housekeeping --report-only --auto-reschedule` (i.e., fi
 
 7. **Missing global memory cascade (scope-aware)** — Claude's auto-memory loader is cwd-siloed: only `~/.claude/projects/{slug}/memory/` loads, so the global memories at `~/.claude/memory/` never reach project sessions. But **not every global memory belongs in every project** — most are situational (a `bangkok_cost_estimates` memory is noise in a C++ engine; `wayland_keybindings` is noise in a web project). So the cascade is **scoped**, not blanket:
    - Each global memory declares **`applies-to: [tag, …]`** in its frontmatter (`universal` / `web` / `legacy-cpp` / `desktop` / `bkk` / …). Absent → treated as `universal` (back-compat).
-   - Each project declares **`tags: [...]`** in `projects.json`. A memory cascades into a project iff it's `universal` **or** its `applies-to` intersects the project's `tags`. Untagged project → `universal` memories only (safe default).
+   - Each project declares **`code.tags: [...]`** in `projects.json` (namespaced under `code` — the same key any project-scoped consumer of the registry uses, parallel to e.g. `invest` for the investor-portal's own project data). A memory cascades into a project iff it's `universal` **or** its `applies-to` intersects the project's `code.tags`. Untagged project → `universal` memories only (safe default).
    - This scan detects, per active project: **qualifying** global memories not yet symlinked in (to add), symlinks to memories that **no longer qualify** for the project's scope (to prune), stale symlinks (target deleted), and real-file collisions (project has a same-named local memory).
    - Recommend: run the `apply-cascade.py` helper, which symlinks only qualifying memories, **prunes out-of-scope ones**, merges the global `MEMORY.md` sections into the project's `MEMORY.md` between auto-managed markers, and updates `.gitignore`. Collisions are surfaced but never overwritten.
    - **Project-specific memories don't belong in global.** A memory that names one project (e.g. *"In ~/SRC/trip, …"*) should live as a real file in that project's `.claude/memory/`, not in the global dir.
@@ -222,7 +231,7 @@ Every recommendation's command block follows this pattern:
 
 ## Canonical project list
 
-The skill reads `~/.claude/projects.json` for the list of projects to scan. Each entry has `name`, `path`, `status` (active/dormant), optional `notes`. Dormants skipped by default; `--include-dormant` includes them.
+The skill reads `~/.claude/projects.json` for the list of projects to scan. Each entry has `name`, `path`, `status` (active/dormant/not-cloned), optional `notes`, and a `code` sub-object (`code.tags` — memory-cascade scope tags; `code.repoURL` — the project's GitHub URL, when known). Entries with `path: null` (idea-stage projects with no local checkout, or projects not yet cloned) are skipped entirely — nothing to scan. Dormants skipped by default; `--include-dormant` includes them. Other consumers of the registry namespace their own project-specific data the same way `code` does here — e.g. the investor portal (`invest`) uses an `invest` key — never a shared generic field.
 
 ## Related plan
 
