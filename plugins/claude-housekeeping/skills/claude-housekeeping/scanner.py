@@ -146,6 +146,7 @@ CATEGORIES_ORDER = [
     ("missing-settings", "Projects without `.claude/settings.json`"),
     ("config-drift",   "Config drift (per-project duplicates global)"),
     ("broken-hook-paths", "Hook/Taskfile commands referencing missing scripts"),
+    ("projects-json-contract", "Registry consumers missing the shared contract"),
     ("uncommitted",    "Uncommitted/untracked `.claude/` changes"),
     ("orphan-plans",   "Orphan plans in `~/.claude/plans/`"),
     ("dup-memories",   "Cross-project duplicate memories"),
@@ -169,6 +170,7 @@ CATEGORY_COLUMNS: dict[str, list[str]] = {
     "legacy-root":       ["#", "Legacy root", "Artifact kinds", "Live root", "Stranded"],
     "missing-path":      ["#", "Projects", "Declared under", "Found at `~/<name>`", "Absent"],
     "broken-hook-paths": ["#", "Scope", "Event / task", "Command", "Resolves to"],
+    "projects-json-contract": ["#", "Project", "Consumer files", "Required doc"],
     "uncommitted":       ["#", "Scope", "Status", "File"],
     "orphan-plans":      ["#", "File", "Size", "Age", "Action"],
     "dup-memories":      ["#", "Memory", "Projects (≥3)", "Action"],
@@ -184,6 +186,7 @@ CATEGORY_COLUMNS: dict[str, list[str]] = {
 # for items in that category (so we don't repeat the same path in every row).
 CATEGORY_PATH_PATTERNS: dict[str, str] = {
     "missing-settings":  "Stub path: `~/SRC/<project>/.claude/settings.json`",
+    "projects-json-contract": "Canonical contract: `~/docs/projects-json.md` (`https://github.com/wbniv/homedir/blob/main/docs/projects-json.md`).",
     "config-drift":      "Project settings: `~/SRC/<project>/.claude/settings.json`",
     "broken-hook-paths": "Scope `~` = global `~/.claude/settings.json`; other scopes = `~/SRC/<project>/.claude/settings.json`. Resolves-to column shows the path after expanding `$HOME`, `${SRC_ROOT:-…}`, `$CLAUDE_PROJECT_DIR`.",
     "uncommitted":       "Scope `~` = homedir git repo (covers global `~/.claude/`); other scopes = each project's repo (covers `~/SRC/<project>/.claude/`). Run `cd <scope> && git status -- .claude/` to inspect.",
@@ -203,6 +206,7 @@ CATEGORY_PATH_PATTERNS: dict[str, str] = {
 # "What we scanned for" section of every report.
 SCAN_DESCRIPTIONS: dict[str, str] = {
     "missing-path":      "Registry (`projects.json`) entries whose declared `path` isn't a directory on disk. Split into two cases: the project exists at `~/<name>` and only the declared path is stale (fixable — a compat symlink makes its memory reachable), or it isn't checked out here at all (nothing to do). Reported once, and these projects are excluded from every path-dependent scan so they can't manufacture phantom cascade drift.",
+    "projects-json-contract": "First-party code that reads or writes the shared projects.json but whose README/CLAUDE/setup docs do not link the canonical contract. Registry membership alone does not count.",
     "legacy-root":       "Claude Code reads its global config from $CLAUDE_CONFIG_DIR (live root). This finds global artifacts — skills, commands, memory, hooks, settings keys — that still sit in a pre-move root and are therefore no longer loaded at all. Catches a config-dir migration (e.g. ~/.claude → ~/.config/claude/<account>/) that silently left most of the config behind.",
     "global-hooks":      "Global ~/.claude/settings.json has the expected baseline hooks (transcript-logger, plan-first, plan-migrate, md-preview, etc.)",
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
@@ -2799,6 +2803,40 @@ def build_diff_report(before_path: Path, after_path: Path) -> str:
 # ─── entry ─────────────────────────────────────────────────────────────
 
 
+def scan_projects_json_contract(projects: list[Project]) -> list[Recommendation]:
+    """Report real registry consumers whose entry docs omit the shared contract."""
+    signal = re.compile(r"projects\.json|CLAUDE_PROJECTS_JSON|INVEST_REGISTRY_PATH|registry:(?:pull|push|diff)")
+    extensions = {".py", ".sh", ".ts", ".js", ".mjs", ".yml", ".yaml"}
+    recs = []
+    for project in projects:
+        hits = []
+        for path in project.path.rglob("*"):
+            if not path.is_file() or (path.suffix not in extensions and path.name != "Taskfile.yml"):
+                continue
+            rel = path.relative_to(project.path)
+            if any(part in {".git", "docs", "vendor", "node_modules", "dist", "build", "__pycache__"} for part in rel.parts):
+                continue
+            try:
+                if path.stat().st_size <= 1_000_000 and signal.search(path.read_text(errors="ignore")):
+                    hits.append(str(rel))
+            except OSError:
+                continue
+        if not hits:
+            continue
+        entry_docs = [project.path / "README.md", project.path / "CLAUDE.md", project.path / "docs" / "SETUP.md"]
+        documented = any(p.is_file() and "docs/projects-json.md" in p.read_text(errors="ignore") for p in entry_docs)
+        if not documented:
+            recs.append(Recommendation(
+                category="projects-json-contract",
+                title=f"{project.name}: registry consumer lacks contract link",
+                details="Add the canonical contract link and state which fields this project owns.",
+                command_block="# Documentation-only fix; do not edit or push the registry.",
+                severity="warn",
+                row=[project.name, ", ".join(hits[:4]), "~/docs/projects-json.md"],
+            ))
+    return recs
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--report-only", action="store_true")
@@ -2855,6 +2893,7 @@ def main() -> int:
     recs.extend(scan_missing_project_settings(scan_set))
     recs.extend(scan_config_drift(scan_set))
     recs.extend(scan_broken_hook_paths(scan_set))
+    recs.extend(scan_projects_json_contract(scan_set))
     recs.extend(scan_uncommitted_claude_changes(scan_set))
     recs.extend(scan_orphan_plans(args.threshold_days))
     recs.extend(scan_duplicate_memories(scan_set))
