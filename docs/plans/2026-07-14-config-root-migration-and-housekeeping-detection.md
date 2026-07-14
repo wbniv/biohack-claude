@@ -200,8 +200,7 @@ restart.
   the plugin cache is keyed by commit (`6b49abca38f1` = pre-fix) and rebuilds on restart.
   Until then the plugin still runs the stale scanner — the synced `~/.claude/skills/` copy
   is current.
-- **`missing-cascade`: 33** — pre-existing, untouched. Global memories not yet symlinked
-  into each project.
+- ~~**`missing-cascade`: 33**~~ — **closed**, see [Follow-on: the cascade](#follow-on-the-cascade).
 - **`~/.claude/skills/` duplicates ~8 plugins** (`billing-tags`≈`aws-billing-tags`,
   `package`, `iam-bootstrap`, …). Both now load, as they did on the old machine. Worth a
   deliberate pick-one pass, but that's a strategy call, not drift.
@@ -210,3 +209,69 @@ restart.
   resolves paths itself), but they're stale declarations.
 - **Relocating the 317 tracked files into the live root** and retiring `~/.claude` — likely
   where Claude Code is heading, but a large migration to run days before a hardware swap.
+
+---
+
+## Follow-on: the cascade
+
+Asked whether the skill fixes `missing-cascade: 33` and whether it should. It does —
+`apply-cascade.py` is purpose-built — but the question exposed more of the same disease.
+
+**The fixer was broken the same way as everything else.** `apply-cascade.py` read its index
+from `~/.claude/projects/-home-will/memory/MEMORY.md`, a pre-migration path that has since
+diverged from the master (25 lines vs 34). Running the cascade would have stamped a
+9-entry-short index into all 33 projects — the tool built to remove staleness would have
+propagated it. Fixed in `ecc5636`.
+
+**The 33 was mostly not real.** It decomposed into three unrelated things:
+
+| Cluster | Count | Reality |
+|---|---|---|
+| `2 missing` | 12 | Already cascaded. The 2 were the globals added *that hour*. Normal lag. |
+| `19–23`, path stale | 8 | Real projects, real memory, registry pointing at `~/SRC/<n>` with no symlink |
+| `19–23`, absent | 13 | Not cloned here. Nothing to cascade into. |
+
+The middle cluster was the find: **`claude-usage` (28 memories), `llvm-mos-65816` (28),
+`worldfoundry.org` (23), `parking-space` (22)** and four more existed at `~/<name>` with
+populated stores that the registry couldn't see. Not "false positives" — a stale path
+doesn't error, it reports *nothing*. It's why `[[modest-gains-worth-doing]]` and
+`[[a16-codegen-mostly-16bit-mode]]` dangled from memories that do load. Both resolve now.
+
+### What landed
+
+1. **Scanner guard** (`dcca8b4`) — the `home_src_layout` memory said "skip them", addressed
+   to a human reading the report. Encoded it instead: absent paths are reported once via a
+   new `missing-path` scan (splitting *relocatable* from *absent*) and excluded from every
+   path-dependent scan. `missing-cascade` 33 → 12; recommendations 70 → 50.
+2. **Eight compat symlinks** (`ae89278`) — and tracked the whole farm, including the 12
+   pre-existing ones, which were entirely untracked and would have silently re-dangled on
+   the machine move. They're symlinks, so git stores one mode-120000 blob each and never
+   recurses — the block's "must not be vendored in" rule doesn't apply. Verified: 19
+   entries staged, all 120000, no repo contents.
+3. **`cascade-heal.sh`** (`acc71c7`, wired in `5565930`) — PostToolUse on `Write|Edit|MultiEdit`;
+   when the written file is inside the master store, re-projects it across active on-disk
+   projects. Resolves master/helper/registry via `$CLAUDE_CONFIG_DIR` first, so it survives
+   the next root move. Verified: ignores project-local, non-md, and non-master writes; on a
+   real master write re-projected into 20 projects and drove `missing-cascade` 20 → **0**.
+
+**Design note — the cascade is derived state.** Symlinks plus a managed block are a pure
+projection of the master; they don't need to be *reconciled*, they need to be *regenerated*.
+Gating a projection behind manual approval is what let it sit at 33. The projection is still
+committed per repo (existing convention; `biohack.net` is the outlier — it gitignores the
+symlinks and tracks only `MEMORY.md`), but nothing is lost if it isn't: master +
+`apply-cascade.py` reproduce it anywhere.
+
+`biohack.net` (behind 101) and `foundrylinux.org` (behind 1) rejected the push — the stale-clone
+case that same memory documents. Applied its procedure with the user's approval: drop the
+regenerable commit, fast-forward, re-cascade on the fresh tree. A merge conflicts on
+`.claude/memory/`; a force-push would have destroyed 101 real remote commits.
+
+### Final state
+
+`legacy-root` **0** · `missing-cascade` **0** · `unmirrored-memory` **0** · `global-hooks` **0** ·
+`dup-memories` **0** · `leaked-project-memories` **0** · `broken-hook-paths` **0**.
+Recommendations 217 → **53**, all pre-existing and unrelated (20 orphan plans, 16 missing
+HISTORY sidecars, 6 projects without settings.json). Nothing unpushed across 21 repos.
+
+`missing-path: 1` is now correct-and-permanent: 13 registry entries for clones that live on
+another machine.
