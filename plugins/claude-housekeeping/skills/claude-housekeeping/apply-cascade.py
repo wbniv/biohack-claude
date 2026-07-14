@@ -43,10 +43,17 @@ HOME = Path.home()
 # Canonical global memory: cross-cutting feedback_*.md and user_*.md live here.
 # Relative symlinks in per-project .claude/memory/ point at this dir.
 GLOBAL_MEMORY_DIR = HOME / ".claude" / "memory"
-# Index source for the cascade block in each project's MEMORY.md. The cwd=~
-# auto-memory dir's MEMORY.md is the de-facto global index (its entries are
-# the cross-cutting memories now living at GLOBAL_MEMORY_DIR via symlinks).
-MEMORY_INDEX_SOURCE = HOME / ".claude" / "projects" / "-home-will" / "memory" / "MEMORY.md"
+# Index source for the cascade block in each project's MEMORY.md: the index that
+# sits WITH the master store. Historically this was the cwd=~ auto-memory dir's
+# MEMORY.md, back when the index lived there and the files had moved to
+# GLOBAL_MEMORY_DIR. That is no longer true — the live cwd=~ loader dir now
+# symlinks its MEMORY.md straight at the master's, so the master's copy is
+# canonical and the old loader-dir file is a diverged leftover (25 lines vs 34 as
+# of 2026-07-14). Reading the stale one would stamp a short index into every
+# project the cascade touches. Prefer the master; fall back only if it's absent.
+_MASTER_INDEX = GLOBAL_MEMORY_DIR / "MEMORY.md"
+_LEGACY_INDEX = HOME / ".claude" / "projects" / "-home-will" / "memory" / "MEMORY.md"
+MEMORY_INDEX_SOURCE = _MASTER_INDEX if _MASTER_INDEX.is_file() else _LEGACY_INDEX
 # Legacy global dir — sweep stale symlinks pointing here, from before the
 # 2026-05-21 canonical migration. Keep this around until every project has
 # been re-cascaded.
