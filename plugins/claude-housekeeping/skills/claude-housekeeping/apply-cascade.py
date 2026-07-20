@@ -118,6 +118,18 @@ def main() -> int:
         return 2
 
     project_memory_dir = project_path / ".claude" / "memory"
+
+    # The master store must never cascade into itself. `homedir` is a registered
+    # project whose path is `~`, and cascade-heal.sh loops over every project in
+    # projects.json — so it hands us the master dir as a destination. Projecting
+    # onto the source re-reads the block it just wrote: every run re-suffixes the
+    # headings ("## User (inherited from ~) (inherited from ~) …") and appends
+    # another managed block, and that corrupted index is then cascaded verbatim
+    # into all ~26 project MEMORY.md files.
+    if project_memory_dir.resolve() == GLOBAL_MEMORY_DIR.resolve():
+        print(f"[{project_path.name}] skipped: this IS the master memory store")
+        return 0
+
     project_memory_dir.mkdir(parents=True, exist_ok=True)
 
     global_files = sorted(
@@ -218,6 +230,19 @@ def merge_memory_md(memory_md: Path) -> None:
         re.DOTALL,
     )
     content = pattern.sub("\n", content)
+
+    # Sweep up unpaired markers. The pair-strip above cannot be trusted to leave
+    # a clean file when the input is already malformed: against
+    # BEGIN1 … BEGIN2 … BEGIN3 … END1 END2 END3, the non-greedy match runs from
+    # BEGIN1 to END1, swallowing the inner BEGINs and stranding END2/END3. Those
+    # orphans would then survive every future run. Drop any marker line still
+    # standing, so a damaged file converges to exactly one managed block.
+    content = re.sub(
+        rf"^[ \t]*(?:{re.escape(MEMORY_BEGIN)}|{re.escape(MEMORY_END)})[ \t]*\n?",
+        "",
+        content,
+        flags=re.MULTILINE,
+    )
 
     sections = parse_sections(MEMORY_INDEX_SOURCE.read_text()) if MEMORY_INDEX_SOURCE.is_file() else {}
 
