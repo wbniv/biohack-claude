@@ -4,9 +4,9 @@ description: As of 2026-05-03, new UI work goes through local Open Design instea
 type: project
 originSessionId: 11d5d0e4-4efa-48be-a468-40eb56d4cd62
 ---
-On 2026-05-03 the SplitLedger design tooling switched from cloud claude.ai/design to local **Open Design** ([nexu-io/open-design](https://github.com/nexu-io/open-design), Apache-2.0), installed at `~/SRC/open-design` and started with `pnpm tools-dev run web` (Node 24 via fnm). OD drives Claude Code on PATH as its design agent.
+On 2026-05-03 the SplitLedger design tooling switched from cloud claude.ai/design to local **Open Design** ([nexu-io/open-design](https://github.com/nexu-io/open-design), Apache-2.0), installed at `~/open-design` and started with `pnpm tools-dev run web` (Node 24 via fnm). OD drives Claude Code on PATH as its design agent.
 
-**Live URLs are ephemeral.** `tools-dev` binds daemon + web to OS-assigned ports that change every boot — discover them with `cd ~/SRC/open-design && pnpm tools-dev status` (or read `.tmp/tools-dev/default/logs/{daemon,web}/latest.log`). The QUICKSTART's `:5175` (web) and `:7457` (daemon) are CLI defaults for `od` standalone, not what `tools-dev` uses. (Initial CLAUDE.md/memory edits on 2026-05-03 incorrectly hardcoded those ports; corrected 2026-05-04.)
+**Live URLs are ephemeral.** `tools-dev` binds daemon + web to OS-assigned ports that change every boot — discover them with `cd ~/open-design && pnpm tools-dev status` (or read `.tmp/tools-dev/default/logs/{daemon,web}/latest.log`). The QUICKSTART's `:5175` (web) and `:7457` (daemon) are CLI defaults for `od` standalone, not what `tools-dev` uses. (Initial CLAUDE.md/memory edits on 2026-05-03 incorrectly hardcoded those ports; corrected 2026-05-04.)
 
 **Why:** Local-first ownership; remove the cloud dependency; OD wraps the same artifact-first design loop without locking the project to a single hosted canvas.
 

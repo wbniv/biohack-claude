@@ -32,11 +32,11 @@ unchanged.
 All hook commands take the form:
 
 ```
-bash $HOME/SRC/python-tui-lib/hooks/<name>.sh
+bash $HOME/python-tui-lib/hooks/<name>.sh
 ```
 
 Hooks are called directly — there is no wrapper or checksum indirection.
-The absolute `$HOME/SRC/python-tui-lib/hooks/` path (not a relative or
+The absolute `$HOME/python-tui-lib/hooks/` path (not a relative or
 `../python-tui-lib` form) means a subdir/worktree cwd can't break resolution.
 
 ## JSON snippet to merge
@@ -49,7 +49,7 @@ supports JSON merge / patch, that's easier than hand-merging.
 "UserPromptSubmit": [
   {
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-logger.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/transcript-logger.sh", "timeout": 5 }
     ]
   }
 ],
@@ -57,16 +57,16 @@ supports JSON merge / patch, that's easier than hand-merging.
   {
     "matcher": "Bash",
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/commit-checklist.sh", "timeout": 5 },
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/tf-blocker.sh", "timeout": 5 },
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/sleep-blocker.sh", "timeout": 5 },
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/git-add-guard.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/commit-checklist.sh", "timeout": 5 },
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/tf-blocker.sh", "timeout": 5 },
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/sleep-blocker.sh", "timeout": 5 },
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/git-add-guard.sh", "timeout": 5 }
     ]
   },
   {
     "matcher": "Write|Edit",
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-first.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/plan-first.sh", "timeout": 5 }
     ]
   }
 ],
@@ -74,32 +74,32 @@ supports JSON merge / patch, that's easier than hand-merging.
   {
     "matcher": "ExitPlanMode",
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-migrate.sh", "timeout": 10 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/plan-migrate.sh", "timeout": 10 }
     ]
   },
   {
     "matcher": "Write|Edit",
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/md-preview.sh", "timeout": 30 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/md-preview.sh", "timeout": 30 }
     ]
   },
   {
     "matcher": "Write|Edit|MultiEdit",
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/py-syntax.sh", "timeout": 10 },
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/shell-strict.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/py-syntax.sh", "timeout": 10 },
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/shell-strict.sh", "timeout": 5 }
     ]
   }
 ],
 "Stop": [
   {
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/todo-reminder.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/todo-reminder.sh", "timeout": 5 }
     ]
   },
   {
     "hooks": [
-      { "type": "command", "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-stop.sh", "timeout": 5 }
+      { "type": "command", "command": "bash $HOME/python-tui-lib/hooks/transcript-stop.sh", "timeout": 5 }
     ]
   }
 ]
@@ -145,5 +145,5 @@ cp -a /tmp/settings.json.bak-<timestamp> $HOME/.claude/settings.json
 
 ## See also
 
-- [Plan: 2026-05-19-globalize-hooks-housekeeping-skill.md](~/SRC/docs/plans/2026-05-19-globalize-hooks-housekeeping-skill.md) (Part A: hook + global wiring)
-- [Audit: 2026-05-19-housekeeping-report-audit.md](~/SRC/docs/investigations/2026-05-19-housekeeping-report-audit.md) (why the report was reshaped)
+- [Plan: 2026-05-19-globalize-hooks-housekeeping-skill.md](~/docs/plans/2026-05-19-globalize-hooks-housekeeping-skill.md) (Part A: hook + global wiring)
+- [Audit: 2026-05-19-housekeeping-report-audit.md](~/docs/investigations/2026-05-19-housekeeping-report-audit.md) (why the report was reshaped)

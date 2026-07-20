@@ -12,7 +12,7 @@ briefly — don't oversell.
 
 **Why:** Will pushed back on `@vite-pwa/astro` with "we've made several PWA apps
 together already and it didn't seem to be painful." Reference projects:
-`~/SRC/parking-space` and `~/SRC/gustos-colores`. He finds framework-wrapper convenience
+`~/parking-space` and `~/gustos-colores`. He finds framework-wrapper convenience
 less valuable than a stable, portable, well-understood pattern across projects.
 
 **How to apply:** Before recommending an integration library (vite plugins, framework

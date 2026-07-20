@@ -15,8 +15,8 @@ timing out after a few calls. `mcp__stitch__generate_variants` is
 either unmetered or has a much higher limit — not noticeably
 rate-limited in practice.
 
-*Why:* confirmed hands-on by the user in `~/SRC/parking-space/`.
-Full tracking lives at `~/SRC/parking-space/.claude/memory/`.
+*Why:* confirmed hands-on by the user in `~/parking-space/`.
+Full tracking lives at `~/parking-space/.claude/memory/`.
 
 **2. First-call timeouts on long prompts**
 

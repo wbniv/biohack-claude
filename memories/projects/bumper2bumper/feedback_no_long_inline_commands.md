@@ -16,6 +16,6 @@ Instead: write the command to a file (e.g. `/tmp/<topic>.sh`) using the Write to
 
 **How to apply:**
 - Threshold: anything over ~80 characters, anything with nested quotes, anything with `$(...)` or backticks, anything with embedded JSON, anything that wraps in the chat display.
-- Always include `set -euo pipefail` at the top of the script (per `~/SRC/CLAUDE.md`).
+- Always include `set -euo pipefail` at the top of the script (per `~/CLAUDE.md`).
 - Echo a confirmation at the end of the script so the user can see it succeeded.
 - Don't bother with the script-file pattern for trivial commands like `git status` or `task serve` — just give those as inline.

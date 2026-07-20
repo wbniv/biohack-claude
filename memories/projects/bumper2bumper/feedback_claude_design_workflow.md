@@ -18,4 +18,4 @@ After Claude Design answers:
 
 **How to apply:** Any plan that involves a UI decision consulted at claude.ai/design should have a Design references section. The zip goes in the repo before the plan is considered complete.
 
-**Superseded 2026-05-03:** the design tool is now local Open Design at `~/SRC/open-design` (URL is ephemeral — `pnpm tools-dev status` prints it), not claude.ai/design. The export-to-`docs/designs/YYYY-MM-DD-rN/` discipline and the **Design references** plan table are unchanged. See `project_open_design_switch.md` for the switch details and the small workflow deltas (`rN` is now manually incremented; OD export formats are HTML/ZIP/PDF).
+**Superseded 2026-05-03:** the design tool is now local Open Design at `~/open-design` (URL is ephemeral — `pnpm tools-dev status` prints it), not claude.ai/design. The export-to-`docs/designs/YYYY-MM-DD-rN/` discipline and the **Design references** plan table are unchanged. See `project_open_design_switch.md` for the switch details and the small workflow deltas (`rN` is now manually incremented; OD export formats are HTML/ZIP/PDF).

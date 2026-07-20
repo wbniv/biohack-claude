@@ -13,6 +13,6 @@ When proposing options for an external service in a plan, list the realistic eco
 
 Even if the recommendation collapses to one option, name the alternatives and the axis they differ on (price, setup overhead, dev ergonomics, ToS risk).
 
-**Why:** User flagged a WhatsApp send-side options block in [`docs/plans/2026-05-10-whatsapp-interactive-notifications.md`](../../../../SRC/bumper2bumper/docs/plans/2026-05-10-whatsapp-interactive-notifications.md) that listed only Twilio and Meta direct — missing the entire BSP reseller ecosystem (360dialog, Vonage, Infobip, Sinch, etc.). A two-vendor list reads like a false dichotomy and may steer the project toward the wrong choice (e.g. Twilio when 360dialog would be a better long-run fit).
+**Why:** User flagged a WhatsApp send-side options block in [`docs/plans/2026-05-10-whatsapp-interactive-notifications.md`](../../../../bumper2bumper/docs/plans/2026-05-10-whatsapp-interactive-notifications.md) that listed only Twilio and Meta direct — missing the entire BSP reseller ecosystem (360dialog, Vonage, Infobip, Sinch, etc.). A two-vendor list reads like a false dichotomy and may steer the project toward the wrong choice (e.g. Twilio when 360dialog would be a better long-run fit).
 
 **How to apply:** Whenever a plan section weighs "options" for a SaaS, API, or vendor decision — pause and ask: is there a reseller layer? An open-source alternative? An unofficial route? A BSP/aggregator tier? Name them, even briefly. Two-bullet vendor comparisons are usually a sign you stopped surveying too early.

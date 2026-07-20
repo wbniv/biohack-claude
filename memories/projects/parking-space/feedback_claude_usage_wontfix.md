@@ -7,7 +7,7 @@ metadata:
   originSessionId: 306b596d-3f9a-4f39-983d-db2690410854
 ---
 
-Before raising any issue in a claude-usage code review, check `/home/will/SRC/claude-usage/docs/wont-fix.md`. It lists all permanently deferred items with their rationale. Re-raising a won't-fix item wastes review cycles.
+Before raising any issue in a claude-usage code review, check `/home/will/claude-usage/docs/wont-fix.md`. It lists all permanently deferred items with their rationale. Re-raising a won't-fix item wastes review cycles.
 
 **Why:** BUG-4, BUG-5, BUG-6, CQ6-6, CQ6-7, and CQ8 were each flagged multiple times across 7 review passes before being formally closed. A reference doc prevents that recurrence.
 

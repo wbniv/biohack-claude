@@ -10,7 +10,7 @@ Codemagic exposes per-build status (`GET /builds/<id>` with header `x-auth-token
 
 **How to apply:** In every Codemagic workflow's build script that compiles or builds something likely to fail, tee stdout+stderr into a `*.log` file under the workspace, then add that file path to the workflow's `artifacts:` list. On any build (red or green) the artifacts zip is fetchable via the URL embedded in `GET /builds/<id>`'s response (`build.artefacts[].url`). Note the British spelling `artefacts` in the API field name.
 
-Example pattern (from [`gustos-colores`](../../SRC/gustos-colores/codemagic.yaml) and now [`bumper2bumper`](../../SRC/bumper2bumper/codemagic.yaml) `splitledger-android`):
+Example pattern (from [`gustos-colores`](../../gustos-colores/codemagic.yaml) and now [`bumper2bumper`](../../bumper2bumper/codemagic.yaml) `splitledger-android`):
 
 ```yaml
 scripts:
@@ -28,4 +28,4 @@ artifacts:
 
 The originating commit on the WorldFoundry-wbniv side was `7021ba58` ("codemagic: pipe gradle output to gradle-build.log artifact for debugging"); same shape, gradle instead of flutter.
 
-[`scripts/codemagic-build.sh`](../../SRC/bumper2bumper/scripts/codemagic-build.sh) implements this fully: on `failed|canceled|timeout` status, it pulls the artifacts zip URL from `build.artefacts[]`, downloads it, and `unzip -p`s every `*.log` inside, printing the last `LOG_TAIL` lines (default 200) of each. So `task codemagic-build BRANCH=mvp` succeeds-or-shows-the-actual-error end-to-end without any browser visit.
+[`scripts/codemagic-build.sh`](../../bumper2bumper/scripts/codemagic-build.sh) implements this fully: on `failed|canceled|timeout` status, it pulls the artifacts zip URL from `build.artefacts[]`, downloads it, and `unzip -p`s every `*.log` inside, printing the last `LOG_TAIL` lines (default 200) of each. So `task codemagic-build BRANCH=mvp` succeeds-or-shows-the-actual-error end-to-end without any browser visit.

@@ -6,7 +6,7 @@ originSessionId: 586fada5-92b6-4cd2-b4ab-913e73feacaa
 ---
 At any natural checkpoint — feature complete, fix verified, plan written, phase landed — commit immediately. **Do not** ask "want me to commit?" or "should I commit now?" or "should I bundle?". Just commit.
 
-**Why:** [SRC CLAUDE.md](../../../CLAUDE.md) already says "Commit, merge, and push without asking at logical stopping points — don't gate routine git operations on user approval." The user has reinforced this explicitly: *"commit. always commit. why do you keep asking me? whenever you think it's worth asking me to commit, just bloody commit already"* (2026-05-10, after Phase 0 of the mvp-breakage detection plan landed end-to-end and I asked for permission to commit instead of committing).
+**Why:** [homedir CLAUDE.md](../../../CLAUDE.md) already says "Commit, merge, and push without asking at logical stopping points — don't gate routine git operations on user approval." The user has reinforced this explicitly: *"commit. always commit. why do you keep asking me? whenever you think it's worth asking me to commit, just bloody commit already"* (2026-05-10, after Phase 0 of the mvp-breakage detection plan landed end-to-end and I asked for permission to commit instead of committing).
 
 The cost of asking is real: it interrupts flow, adds latency, treats the user as a permission-gate rather than a collaborator, and accumulates uncommitted state when work is at a perfectly committable point.
 

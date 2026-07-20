@@ -1,23 +1,21 @@
 ---
 name: home_src_layout
-description: "Post-reformat, projects moved from ~/SRC/<name> to ~/<name>; what still assumes the old ~/SRC path and how it was patched"
+description: "The ~/SRC/<name> → ~/<name> flattening is complete; ~/SRC no longer exists and nothing should reference it"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 9425f245-1b60-4bcf-91a7-279db284a72c
 ---
 
-After the May 2026 machine reformat, project working copies live **directly at `~/<name>`** (e.g. `~/python-tui-lib`, `~/biohack.net`), **not** at `~/SRC/<name>`. `~/SRC/` now holds only `CLAUDE.md`, `docs/`, `free-services.md`. The old homedir is preserved at `~/homedir-old/`.
+**`~/SRC/` is gone.** The layout is flat: every project working copy lives **directly at `~/<name>`** (e.g. `~/python-tui-lib`, `~/biohack.net`), and the shared cascade docs are `~/CLAUDE.md`, `~/docs/`, `~/docs/free-services.md`. The homedir git repo *is* `~`. The old homedir is preserved at `~/homedir-old/`.
 
-Things that still hardcode the old `~/SRC/<name>` layout:
-- **`~/.claude/projects.json`** — every `path` is `~/SRC/<name>`. Stale, and also lists 9 active projects not checked out on this machine (bumper2bumper, finding-your-way, foundrylinux.org, gustos-colores, pcs, rapid-raccoon-site, RedGreenV2, WorldFoundry-wbniv, worldfoundry.org). **User chose to leave it as-is** — so [[claude-housekeeping]] scans will keep reporting those 9 as "missing memory cascade" false positives. Skip them.
-- **`~/.claude/hook-runner.sh`** — defaults `SRC_ROOT` to `$HOME/SRC` and resolves all 12 dispatched hooks from `$SRC_ROOT/python-tui-lib/hooks/`. This broke the whole wrapper hook chain (transcript-logger, plan-first, md-preview, etc.).
+The migration finished on **2026-07-19**: `~/SRC/` and the interim `~/SRC/python-tui-lib -> ~/python-tui-lib` compat symlink were removed, which broke every hook wired as `$HOME/SRC/python-tui-lib/hooks/*.sh`. Fixed in the same pass — `~/.claude/settings.json` and `~/.config/claude/will/settings.json` hooks, `.gitconfig` `hooksPath`, `~/.config/workspace-default`, GTK bookmarks, the `claude-housekeeping` scanner, and the `project-bootstrap` / `snes-rom-page` skills all now use flat `$HOME/<name>` paths. `~/.claude/projects.json` was migrated to `~/<name>` paths separately.
 
-**Fix applied (2026-05-25):** symlink `~/SRC/python-tui-lib -> ~/python-tui-lib` (user picked this over editing settings.json `env`). hook-runner now resolves + passes checksum. Note: editing `~/.claude/settings.json` is blocked by the auto-mode self-modification classifier — needs explicit user approval.
+Still true and unrelated to SRC: projects.json lists several active projects **not checked out on this machine** (parking-space, bumper2bumper, finding-your-way, …). Those are registry entries for another machine's clone — [[claude-housekeeping]] reports them as absent, which is expected, not drift. `~/bin/clone-projects` is what clones them, flat.
 
-**Why:** the scanner can't see inside `hook-runner.sh`, so broken wrapper-dispatched hooks don't show up as drift — only the runtime "hook-runner: missing hook" error does.
+**Why:** a compat symlink made the old paths keep working, so the stale references survived far longer than the move itself. Once the symlink went, everything referencing `SRC` failed at once.
 
-**How to apply:** when a hook or scanner result references `~/SRC/<name>`, the real path is `~/<name>`. Don't recreate `~/SRC/<name>` dirs or fabricate cascades for absent projects.
+**How to apply:** treat any `~/SRC/...` path you encounter as `~/...` — in docs, hook commands, or scanner output. Never recreate `~/SRC/` or a compat symlink to revive an old path; fix the reference instead. Dated files under `docs/plans/` and `.history/` still say `~/SRC/` on purpose — they record the state at the time and were deliberately left unrewritten.
 
 ## Stale clones reconciled (2026-05-25)
 

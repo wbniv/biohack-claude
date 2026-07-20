@@ -62,10 +62,14 @@ fi
 # Per-project memories (~/.claude/projects/*/memory/, excluding -home-will)
 # ------------------------------------------------------------------
 shopt -s nullglob
-for proj_dir in "${CLAUDE_DIR}/projects/"-home-will-SRC-*/; do
+for proj_dir in "${CLAUDE_DIR}/projects/"-home-will-*/; do
   proj_name="$(basename "$proj_dir")"
-  # strip the -home-will-SRC- prefix for a readable dir name
-  short="${proj_name#-home-will-SRC-}"
+  # strip the -home-will- prefix for a readable dir name; projects live directly
+  # at ~/<name>, so the loader slug is -home-will-<name>. Loader dirs created
+  # before the ~/SRC → ~/ flattening are still slugged -home-will-SRC-<name>, so
+  # drop that leftover segment too and both spellings land in the same dir.
+  short="${proj_name#-home-will-}"
+  short="${short#SRC-}"
   mem_src="${proj_dir}memory"
   if [[ -d "$mem_src" ]]; then
     dest="${MEMORIES_PROJECTS}/${short}"

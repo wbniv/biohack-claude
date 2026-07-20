@@ -1,12 +1,12 @@
 # Memory Index
 
 - [docs/ directory layout](feedback_docs_directory_layout.md) — Plans→`docs/plans/`, investigations→`docs/investigations/`, transcripts→`docs/transcripts/`, prompts→`docs/prompts/YYYY-MM-DD.md`
-- [Screenshot drop location](feedback_screenshots.md) — Screenshots sync from phone via Syncthing to `~/SRC/screenshots/`; monitor that dir
+- [Screenshot drop location](feedback_screenshots.md) — Screenshots sync from phone via Syncthing to `~/screenshots/`; monitor that dir
 - [Terraform state lock diagnosis](feedback_terraform_locks.md) — Never call a TF lock "stale" without `pgrep` first; force-unlocking an active lock corrupts state
 - [Fix forward, not in place](feedback_fix_forward.md) — Debug on the instance if needed, but land the fix in source scripts/templates; then cycle the instance to verify
 - [CLI-only for rare reverse flows](feedback_cli_for_rare_reverse_flows.md) — Reversals (undo-style) don't need TUI parity; rarity is the justification
 - ["Task" means Taskfile](feedback_task_means_taskfile.md) — In this repo, "Task command" = `task <name>` Taskfile entry; default to that interpretation
-- [Stay in the gustos-colores repo](feedback_stay_in_repo.md) — Don't investigate or touch sibling projects in ~/SRC/, even when a shared-account signal points at them
+- [Stay in the gustos-colores repo](feedback_stay_in_repo.md) — Don't investigate or touch sibling projects under ~/, even when a shared-account signal points at them
 - [No j/k as arrow-key alternatives](feedback_no_vim_nav.md) — TUIs use arrow keys only; don't add vim j/k nav
 - [Bump and report version on every deploy](feedback_deploy_version.md) — Increment build N in settings_screen.dart before every deploy; report the new version number after
 - [TODO.md summary block](feedback_todo_summary_block.md) — Keep "AT A GLANCE" summary at top of TODO.md; refresh it whenever you touch any item below

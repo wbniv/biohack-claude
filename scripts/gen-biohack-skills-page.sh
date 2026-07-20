@@ -14,10 +14,10 @@ set -euo pipefail
 # existing page (curated); any new plugins are appended alphabetically.
 # Source link -> the plugin's skills/<name>/SKILL.md if present, else the tree.
 #
-# Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/SRC/biohack.net).
+# Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/biohack.net).
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIOHACK_NET="${BIOHACK_NET_DIR:-${HOME}/SRC/biohack.net}"
+BIOHACK_NET="${BIOHACK_NET_DIR:-${HOME}/biohack.net}"
 ASTRO="${BIOHACK_NET}/src/pages/claude.astro"
 
 usage() {
@@ -30,7 +30,7 @@ from .claude-plugin/marketplace.json + each plugin's plugin.json.
 Only the region between the @generated:plugin-cards markers is rewritten;
 the hand-authored styles, header, featured card, and footer are left alone.
 
-Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/SRC/biohack.net).
+Set BIOHACK_NET_DIR to override the biohack.net checkout (default ~/biohack.net).
 EOF
   exit 0
 }

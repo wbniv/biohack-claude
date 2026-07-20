@@ -12,7 +12,7 @@
 - [Stitch generate_variants is one-source-only](feedback_stitch_one_output_per_call.md) — multi-`selectedScreenIds` still returns 1 screen; fire N parallel calls when refining N screens with the same fix.
 - [Redesign direction: Claude Design warm fintech](project_redesign_direction.md) — orange/teal + Geist/Fraunces is the chosen aesthetic; handoff lives at `docs/designs/redesign-2026-04-25/`. Stitch obsolete; new screens go to **https://claude.ai/design**.
 - [Claude Design workflow: consult → export zip → commit → cite in plan](feedback_claude_design_workflow.md) — extract to `docs/designs/YYYY-MM-DD-rN/`, add Design references table to plan. (Source switched 2026-05-03 — see below.)
-- [Design tooling switched to Open Design 2026-05-03](project_open_design_switch.md) — local OD at `~/SRC/open-design` (port ephemeral; `pnpm tools-dev status` prints URL) replaces claude.ai/design; aesthetic + export discipline unchanged.
+- [Design tooling switched to Open Design 2026-05-03](project_open_design_switch.md) — local OD at `~/open-design` (port ephemeral; `pnpm tools-dev status` prints URL) replaces claude.ai/design; aesthetic + export discipline unchanged.
 - [google_fonts must be 8.x for Geist](project_google_fonts_version.md) — Geist + Geist Mono ship in `google_fonts ^8.0.0`+ only; 6.x will compile but red-screen at runtime.
 - [Per-project Terraform IAM user](feedback_per_project_iam_user.md) — each project gets its own `{abbr}-terraform` IAM user (e.g. `sl-terraform` for SplitLedger); never reuse a shared one across projects.
 - [Don't block on remote ops; monitor and report](feedback_dont_wait.md) — for long deploys/boots, run in background, tail the output file, give periodic status; ScheduleWakeup is a safety net not the primary loop.

@@ -306,7 +306,7 @@ files you modified, verify git diff --cached matches what you touched, and leave
 any other in-progress changes unstaged."<br/><br/>
 
 Specific incident (2026-05-08): Previous message had listed two specific
-preserved-unstaged files (<code>SRC/free-services.md</code>, <code>MEMORY.md</code>). User said
+preserved-unstaged files (<code>docs/free-services.md</code>, <code>MEMORY.md</code>). User said
 "commit the others, sure". I read "the others" as "every pending modification
 in the repo" and made 6 commits spanning settings.json, glossary, three
 projects' memory dirs, and an investigation doc. User had to ask for a revert.
@@ -351,7 +351,7 @@ Note on Oracle Cloud: the "Always Free" 4-core ARM VM is widely cited as a gener
 
 If it's a URL, link it. If it's a name that maps to a URL, link it with that URL. <b>Bare names or URLs in plain text are a defect.</b><br/><br/>
 
-Use <b><code>[label](url)</code></b> form. Never use <b><code><https://…></code></b> shorthand: the shared <code>~/SRC/python-tui-lib/scripts/md-to-pdf.sh</code> regex (<code>re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)</code>) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. <code>clerk.com</code> linking to <code>https://clerk.com</code> or <code>localhost:4321/colophon</code> linking to <code>http://localhost:4321/colophon</code>), still write it as <code>[label](url)</code>.<br/><br/>
+Use <b><code>[label](url)</code></b> form. Never use <b><code><https://…></code></b> shorthand: the shared <code>~/python-tui-lib/scripts/md-to-pdf.sh</code> regex (<code>re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)</code>) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. <code>clerk.com</code> linking to <code>https://clerk.com</code> or <code>localhost:4321/colophon</code> linking to <code>http://localhost:4321/colophon</code>), still write it as <code>[label](url)</code>.<br/><br/>
 
 # Why this gets its own loud memory<br/><br/>
 
@@ -407,7 +407,7 @@ The declarative-state mode is the more painful one because the assertion gets ba
 
 <b>Why:</b> When offered A (targeted) vs B (proper) for the indri.studio cross-page header animation issue, I marked A as "recommended" and B as a "bigger architectural call." Will responded: *"i want it solved properly, ofc. have we met? heh. remember that"* — making clear this is a standing preference, not specific to that one decision. The minimal fix is a workaround; the proper fix removes the underlying constraint.<br/><br/>
 
-<b>How to apply:</b> When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from <code>~/SRC/CLAUDE.md</code> ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.</td></tr>
+<b>How to apply:</b> When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from <code>~/CLAUDE.md</code> ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.</td></tr>
 
 <tr style="background:#f0f0f0"><td>7</td><td><code>feedback_public_vs_internal_surfaces.md</code></td><td>feedback-public-vs-internal-surfaces</td><td>unknown</td><td><i style="color:#888">general</i></td></tr>
 <tr><td colspan="5">When drafting copy for public-facing pages, keep internal/infrastructure details out. Audit for and cut: repo URLs, predecessor-project references, deploy pipeline specifics, SSM/IaC paths, the names of internal companion projects (e.g. "finding-your-way's infrastructure pattern"), and "where the source code lives" links. The colophon is the obvious trap — a colophon describes the *visible craft* (type, palette, stack at a high level), not the development infrastructure.<br/><br/>
@@ -456,7 +456,7 @@ briefly — don't oversell.<br/><br/>
 
 <b>Why:</b> Will pushed back on <code>@vite-pwa/astro</code> with "we've made several PWA apps
 together already and it didn't seem to be painful." Reference projects:
-<code>~/SRC/parking-space</code> and <code>~/SRC/gustos-colores</code>. He finds framework-wrapper convenience
+<code>~/parking-space</code> and <code>~/gustos-colores</code>. He finds framework-wrapper convenience
 less valuable than a stable, portable, well-understood pattern across projects.<br/><br/>
 
 <b>How to apply:</b> Before recommending an integration library (vite plugins, framework
@@ -509,8 +509,8 @@ the start of multi-step arcs, not a reaction.<br/><br/>
 <tr><td>14</td><td><code>project_finding_your_way.md</code></td><td>Finding Your Way — Parmenides game port</td><td>project</td><td>finding-your-way</td></tr>
 <tr><td colspan="5"><b>Fact:</b> The author of "Parmenides: Finding Your Way" asked Will to convert the
 original 2005 hypertext (144 HTM pages + 19 images, pure hyperlink DAG — no scripts)
-into a modern interactive game. Work lives at <code>~/SRC/finding-your-way/</code>. Plan at
-<code>~/SRC/finding-your-way/docs/plans/PLAN.md</code> — verify against the file rather than
+into a modern interactive game. Work lives at <code>~/finding-your-way/</code>. Plan at
+<code>~/finding-your-way/docs/plans/PLAN.md</code> — verify against the file rather than
 trusting this memory for current scope.<br/><br/>
 
 <b>Phase plan (as of 2026-04-25, was originally 5 phases, now 7):</b>
@@ -539,7 +539,7 @@ philosopher-themed branching narrative; the author wants it accessible again.<br
 <b>Timeline:</b> Author's original request dates to 2023-11-19 (confirmed by Will 2026-04-20). No active deadline — pacing is self-directed. Use this to inform scope decisions: favor doing each phase right over shipping fast.<br/><br/>
 
 <b>How to apply:</b> If user mentions "Parmenides", "finding your way", "temple hub",
-"four realms", "Being/Not-Being", or references <code>~/SRC/finding-your-way/</code>, this is
+"four realms", "Being/Not-Being", or references <code>~/finding-your-way/</code>, this is
 the project. Read <code>docs/plans/PLAN.md</code> first before making suggestions — it has more
 detail than this memory and is kept current.</td></tr>
 
@@ -584,7 +584,7 @@ files you modified, verify git diff --cached matches what you touched, and leave
 any other in-progress changes unstaged."
 
 Specific incident (2026-05-08): Previous message had listed two specific
-preserved-unstaged files (`SRC/free-services.md`, `MEMORY.md`). User said
+preserved-unstaged files (`docs/free-services.md`, `MEMORY.md`). User said
 "commit the others, sure". I read "the others" as "every pending modification
 in the repo" and made 6 commits spanning settings.json, glossary, three
 projects' memory dirs, and an investigation doc. User had to ask for a revert.
@@ -645,7 +645,7 @@ The declarative-state mode is the more painful one because the assertion gets ba
 
 **Why:** Will pushed back on `@vite-pwa/astro` with "we've made several PWA apps
 together already and it didn't seem to be painful." Reference projects:
-`~/SRC/parking-space` and `~/SRC/gustos-colores`. He finds framework-wrapper convenience
+`~/parking-space` and `~/gustos-colores`. He finds framework-wrapper convenience
 less valuable than a stable, portable, well-understood pattern across projects.
 **How to apply:** Before recommending an integration library (vite plugins, framework
 integrations, wrapper SDKs), ask: does Will already do this manually in another
@@ -698,7 +698,7 @@ the start of multi-step arcs, not a reaction.
 
 ### Finding Your Way — Parmenides game port
 **File:** `project_finding_your_way.md`
-**Description:** Author-commissioned modernization of 2005 hypertext philosophy game "Parmenides: Finding Your Way" into a web app at ~/SRC/finding-your-way/
+**Description:** Author-commissioned modernization of 2005 hypertext philosophy game "Parmenides: Finding Your Way" into a web app at ~/finding-your-way/
 
 > **Fact:** The author of "Parmenides: Finding Your Way" asked Will to convert the
 
@@ -706,7 +706,7 @@ the start of multi-step arcs, not a reaction.
 (Twine/Ink/Inform) was considered and rejected as needless indirection. A retired
 philosopher-themed branching narrative; the author wants it accessible again.
 **How to apply:** If user mentions "Parmenides", "finding your way", "temple hub",
-"four realms", "Being/Not-Being", or references `~/SRC/finding-your-way/`, this is
+"four realms", "Being/Not-Being", or references `~/finding-your-way/`, this is
 the project. Read `docs/plans/PLAN.md` first before making suggestions — it has more
 detail than this memory and is kept current.
 
@@ -748,7 +748,7 @@ detail than this memory and is kept current.
 > When presenting fix options between a minimal/targeted fix and a proper/architectural one, **default to the proper one**. Don't lead with the minimal fix as "recommended" just because it's smaller....
 
 **Why:** When offered A (targeted) vs B (proper) for the indri.studio cross-page header animation issue, I marked A as "recommended" and B as a "bigger architectural call." Will responded: *"i want it solved properly, ofc. have we met? heh. remember that"* — making clear this is a standing preference, not specific to that one decision. The minimal fix is a workaround; the proper fix removes the underlying constraint.
-**How to apply:** When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from `~/SRC/CLAUDE.md` ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.
+**How to apply:** When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from `~/CLAUDE.md` ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.
 
 ### feedback-public-vs-internal-surfaces
 **File:** `feedback_public_vs_internal_surfaces.md`

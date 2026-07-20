@@ -1,7 +1,7 @@
 # Memory Index
 
 ## Feedback
-- [feedback_use_feature_workflow.md](feedback_use_feature_workflow.md) — Feature workflow (task feature-start/finish) is good but parking-space-specific; standardize across all projects before promoting to SRC
+- [feedback_use_feature_workflow.md](feedback_use_feature_workflow.md) — Feature workflow (task feature-start/finish) is good but parking-space-specific; standardize across all projects before promoting to the shared homedir CLAUDE.md
 - [feedback_indri_store_badges.md](feedback_indri_store_badges.md) — indri.studio: don't raise store-badge "#" or token-rotation issues; badges are pre-launch, tokens are short-lived
 - [feedback_claude_usage_wontfix.md](feedback_claude_usage_wontfix.md) — claude-usage reviews: read docs/wont-fix.md first; add new won't-fix decisions to it immediately
 

@@ -25,7 +25,7 @@ tasks:
     desc: Regenerate the /claude/ plugin cards in the biohack.net Astro page
     cmds:
       - bash scripts/gen-biohack-skills-page.sh
-      - cmd: echo "Next → cd ~/SRC/biohack.net && task check-source-links && pnpm build, then commit and push a v* tag to deploy."
+      - cmd: echo "Next → cd ~/biohack.net && task check-source-links && pnpm build, then commit and push a v* tag to deploy."
         silent: true
 
   install-local:
@@ -39,7 +39,7 @@ tasks:
   md:
     desc: Render a markdown file to HTML and open in browser
     cmds:
-      - bash {{.HOME}}/SRC/python-tui-lib/scripts/md-to-html.sh {{.CLI_ARGS}}
+      - bash {{.HOME}}/python-tui-lib/scripts/md-to-html.sh {{.CLI_ARGS}}
     vars:
       HOME:
         sh: echo $HOME

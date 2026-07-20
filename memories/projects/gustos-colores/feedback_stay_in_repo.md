@@ -1,10 +1,10 @@
 ---
 name: Stay in the gustos-colores repo — don't cross into sibling projects
-description: Scope is gustos-colores only. Don't investigate or touch sibling projects in ~/SRC/ (finding-your-way, WorldFoundry-*, parking-space, etc.) — even when an issue points at them.
+description: Scope is gustos-colores only. Don't investigate or touch sibling projects under ~/ (finding-your-way, WorldFoundry-*, parking-space, etc.) — even when an issue points at them.
 type: feedback
 originSessionId: ae41ac14-aef4-4a0c-a7a4-048be5e9986c
 ---
-My working scope is `~/SRC/gustos-colores/`. Other projects in `~/SRC/`
+My working scope is `~/gustos-colores/`. Other projects under `~/`
 (finding-your-way, WorldFoundry-*, parking-space, biohack.net,
 bumper2bumper, etc.) have other owners. Don't read their files,
 investigate their bugs, or suggest fixes — even when an AWS-account-wide

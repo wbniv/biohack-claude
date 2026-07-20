@@ -21,6 +21,6 @@ The GH org name is fine for: GitHub org/owner (it IS the GH org), and that's it.
 
 Patches applied 2026-05-21:
 - `~/.claude/skills/new-web-apt-repo/SKILL.md` — derivation table updated for SECRETS_BUCKET, BOOTSTRAP_CACHE, CF_OPERATOR_TOKEN_NAME
-- `~/SRC/indri.studio/scripts/bootstrap-apt.sh` — instance values switched from `wbniv-*` to `indri-studio-*` / `apt.indri.studio`
+- `~/indri.studio/scripts/bootstrap-apt.sh` — instance values switched from `wbniv-*` to `indri-studio-*` / `apt.indri.studio`
 
 Related: [[project-apt-repos-on-cloudflare]] catalogues the existing + planned apt repos under wbniv.

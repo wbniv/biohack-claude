@@ -18,7 +18,7 @@ files you modified, verify git diff --cached matches what you touched, and leave
 any other in-progress changes unstaged."
 
 Specific incident (2026-05-08): Previous message had listed two specific
-preserved-unstaged files (`SRC/free-services.md`, `MEMORY.md`). User said
+preserved-unstaged files (`docs/free-services.md`, `MEMORY.md`). User said
 "commit the others, sure". I read "the others" as "every pending modification
 in the repo" and made 6 commits spanning settings.json, glossary, three
 projects' memory dirs, and an investigation doc. User had to ask for a revert.

@@ -1,5 +1,6 @@
 | Date | Change |
 |------|--------|
+| [2026-06-24](https://github.com/wbniv/biohack-claude/commit/b72b2f8) | feat(site-gen): rewrite /claude/ generator to emit claude.astro cards |
 | [2026-06-24](https://github.com/wbniv/biohack-claude/commit/a9ca22c) | feat(statusline): publish the two-line status line as a marketplace plugin |
 | [2026-05-23](https://github.com/wbniv/biohack-claude/commit/f2d7607) | feat(new-installer): add skill to scaffold one-shot self-removing installers |
 | [2026-05-23](https://github.com/wbniv/biohack-claude/commit/90e9764) | feat(gnome): add install-gnome-usage one-shot installer plugin |
@@ -7,6 +8,11 @@
 | [2026-05-23](https://github.com/wbniv/biohack-claude/commit/46b2fff) | feat: initial biohack-claude marketplace |
 
 <!--history-meta v1
+b72b2f8	author	Will Norris
+b72b2f8	added	1
+b72b2f8	deleted	1
+b72b2f8	files	1
+b72b2f8	body	The old gen-biohack-skills-page.sh wrote a standalone, unstyled index.html to a\ndead path. The live /claude/ page is the hand-authored src/pages/claude.astro in\nthe biohack.net repo, so that output was never used. Rewrite the generator to\nupdate only the plugin-card sections of the real page, between\n@generated:plugin-cards markers — leaving styles, header, featured card, and\nfooter hand-authored.\n\n- Local, non-featured plugins only (vendored/external excluded); read\n  description/category/featured from each plugin.json.\n- Source link → skills/<name>/SKILL.md when present, else the plugin tree\n  (reproduces every current card link).\n- Card order preserved from the existing page (curated); new plugins appended.\n- Mark install-gnome-usage featured so the generator leaves it to the\n  hand-authored featured card; fold the live new-installer + statusline card\n  copy back into plugin.json so regeneration reproduces the page exactly, and\n  regen marketplace.json to match.\n- publish-site task drops the stale markdown preview; README mention updated.\n\nIdempotent: re-running reports "already up to date".\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01SishYPqHvuMnHP3JAGdUxQ
 a9ca22c	author	Will Norris
 a9ca22c	added	6
 a9ca22c	deleted	0

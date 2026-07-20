@@ -20,7 +20,7 @@ metadata:
 
 If it's a URL, link it. If it's a name that maps to a URL, link it with that URL. **Bare names or URLs in plain text are a defect.**
 
-Use **`[label](url)`** form. Never use **`<https://…>`** shorthand: the shared `~/SRC/python-tui-lib/scripts/md-to-pdf.sh` regex (`re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)`) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. `clerk.com` linking to `https://clerk.com` or `localhost:4321/colophon` linking to `http://localhost:4321/colophon`), still write it as `[label](url)`.
+Use **`[label](url)`** form. Never use **`<https://…>`** shorthand: the shared `~/python-tui-lib/scripts/md-to-pdf.sh` regex (`re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)`) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. `clerk.com` linking to `https://clerk.com` or `localhost:4321/colophon` linking to `http://localhost:4321/colophon`), still write it as `[label](url)`.
 
 # Why this gets its own loud memory
 

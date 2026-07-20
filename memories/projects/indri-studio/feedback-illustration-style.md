@@ -36,7 +36,7 @@ Worked first try in ChatGPT (DALL-E / GPT-4o image gen) on 2026-05-13 for the
 smirk, transparent background. Flux Schnell on Workers AI did NOT respect the
 flat-style or purple-accent constraints; DALL-E / GPT-4o is much better at
 character art and at obeying specific colour-placement instructions. Trade-off:
-DALL-E is paid (per `~/SRC/free-services.md`), Workers AI is free — for
+DALL-E is paid (per `~/docs/free-services.md`), Workers AI is free — for
 ongoing/automated work that's character-shaped, plan accordingly.
 
 Related: [[feedback-commit-at-confirmation]]

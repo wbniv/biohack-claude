@@ -31,7 +31,7 @@
           },
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/session-clear-md-flags.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/session-clear-md-flags.sh",
             "timeout": 2
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/todo-reminder.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/todo-reminder.sh",
             "timeout": 5
           }
         ]
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-stop.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/transcript-stop.sh",
             "timeout": 5
           }
         ]
@@ -80,7 +80,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/transcript-logger.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/transcript-logger.sh",
             "timeout": 5
           }
         ]
@@ -92,22 +92,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/commit-checklist.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/commit-checklist.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/tf-blocker.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/tf-blocker.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/sleep-blocker.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/sleep-blocker.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/git-add-guard.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/git-add-guard.sh",
             "timeout": 5
           }
         ]
@@ -117,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-first.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/plan-first.sh",
             "timeout": 5
           }
         ]
@@ -129,7 +129,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/plan-migrate.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/plan-migrate.sh",
             "timeout": 10
           }
         ]
@@ -139,7 +139,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/md-preview.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/md-preview.sh",
             "timeout": 30
           }
         ]
@@ -149,12 +149,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/py-syntax.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/py-syntax.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash $HOME/SRC/python-tui-lib/hooks/shell-strict.sh",
+            "command": "bash $HOME/python-tui-lib/hooks/shell-strict.sh",
             "timeout": 5
           }
         ]
@@ -193,7 +193,7 @@
   "autoMode": {
     "allow": [
       "$defaults",
-      "Allow `pnpm install`, `pnpm tools-dev`, and `pnpm exec tools-dev` (any args) when cwd is `/home/will/SRC/open-design` or a subdirectory. User has explicitly authorized installing and running this open-source design tool (nexu-io/open-design, Apache-2.0).",
+      "Allow `pnpm install`, `pnpm tools-dev`, and `pnpm exec tools-dev` (any args) when cwd is `/home/will/open-design` or a subdirectory. User has explicitly authorized installing and running this open-source design tool (nexu-io/open-design, Apache-2.0).",
       "Allow `git push origin main` and `git push` (no args) — direct pushes to the project default branch are the existing workflow; auto-mode safety here is over-restrictive."
     ]
   }

@@ -109,9 +109,9 @@ def _plugin_source_roots() -> list[Path]:
         mkts = root / "plugins" / "marketplaces"
         if mkts.is_dir():
             roots += [m / "plugins" for m in sorted(mkts.iterdir()) if (m / "plugins").is_dir()]
-    for legacy in (HOME / "SRC" / "biohack-claude" / "plugins", HOME / "biohack-claude" / "plugins"):
-        if legacy.is_dir():
-            roots.append(legacy)
+    hand_cloned = HOME / "biohack-claude" / "plugins"
+    if hand_cloned.is_dir():
+        roots.append(hand_cloned)
     seen, out = set(), []
     for r in roots:
         rr = r.resolve()
@@ -185,33 +185,33 @@ CATEGORY_COLUMNS: dict[str, list[str]] = {
 # A short note rendered below each category's table explaining the path pattern
 # for items in that category (so we don't repeat the same path in every row).
 CATEGORY_PATH_PATTERNS: dict[str, str] = {
-    "missing-settings":  "Stub path: `~/SRC/<project>/.claude/settings.json`",
+    "missing-settings":  "Stub path: `~/<project>/.claude/settings.json`",
     "projects-json-contract": "Canonical contract: `~/docs/projects-json.md` (`https://github.com/wbniv/homedir/blob/main/docs/projects-json.md`).",
-    "config-drift":      "Project settings: `~/SRC/<project>/.claude/settings.json`",
-    "broken-hook-paths": "Scope `~` = global `~/.claude/settings.json`; other scopes = `~/SRC/<project>/.claude/settings.json`. Resolves-to column shows the path after expanding `$HOME`, `${SRC_ROOT:-…}`, `$CLAUDE_PROJECT_DIR`.",
-    "uncommitted":       "Scope `~` = homedir git repo (covers global `~/.claude/`); other scopes = each project's repo (covers `~/SRC/<project>/.claude/`). Run `cd <scope> && git status -- .claude/` to inspect.",
+    "config-drift":      "Project settings: `~/<project>/.claude/settings.json`",
+    "broken-hook-paths": "Scope `~` = global `~/.claude/settings.json`; other scopes = `~/<project>/.claude/settings.json`. Resolves-to column shows the path after expanding `$HOME`, `$CLAUDE_PROJECT_DIR`, and any `${VAR:-default}` form.",
+    "uncommitted":       "Scope `~` = homedir git repo (covers global `~/.claude/`); other scopes = each project's repo (covers `~/<project>/.claude/`). Run `cd <scope> && git status -- .claude/` to inspect.",
     "orphan-plans":      "Source: `~/.claude/plans/<file>`",
-    "dup-memories":      "Per-project: `~/SRC/<project>/.claude/memory/<name>` — promote to `~/.claude/memory/<name>`",
-    "missing-path":      "Source: `projects.json` `path` field. For a project that exists at `~/<name>`, prefer a compat symlink (`ln -s ~/<name> ~/SRC/<name>`) over rewriting the registry — that's the established choice here. For one that isn't checked out on this machine, no action: it's a registry entry for another machine's clone.",
+    "dup-memories":      "Per-project: `~/<project>/.claude/memory/<name>` — promote to `~/.claude/memory/<name>`",
+    "missing-path":      "Source: `projects.json` `path` field. Projects live directly at `~/<name>`, so when the project is on disk and only the declared path is stale, the fix is to correct that entry's `path` in `projects.json` — not to add a symlink. For one that isn't checked out on this machine, no action: it's a registry entry for another machine's clone.",
     "legacy-root":       "Live root = `$CLAUDE_CONFIG_DIR` (what Claude Code reads); legacy root = a pre-move config dir still on disk. Fix by reconnecting the artifact into the live root — symlink the dir (`ln -s <legacy>/<artifact> <live>/<artifact>`) when the legacy root is the version-controlled one, or merge the missing `settings.json` keys. Project-scoped `.claude/` is unaffected — it loads from the repo, which is why this drift hides.",
-    "missing-cascade":   "Globals at `~/.claude/projects/-home-will/memory/<name>` → symlinks at `~/SRC/<project>/.claude/memory/<name>`. Apply via the recommendation's command block.",
-    "leaked-project-memories": "Source: `~/.claude/memory/<name>` or `~/.claude/projects/-home-will/memory/<name>`. Destination: `~/SRC/<owner>/.claude/memory/<name>` as a real file (not a cascade symlink).",
-    "unmirrored-memory": "Loader dir `~/.claude/projects/<slug>/memory` should be a symlink → `~/SRC/<project>/.claude/memory`. Drift = it's a real dir (memory un-versioned in the project repo). Command block relocates it + symlinks back. Reference: llvm-mos-65816.",
-    "dup-commands":      "Per-project: `~/SRC/<project>/.claude/commands/<name>` — global at `~/.claude/commands/<name>`",
-    "skill-frontmatter": "Global skills: `~/.claude/skills/<name>/SKILL.md`. Project-scope: `~/SRC/<project>/.claude/skills/<name>/SKILL.md`.",
-    "missing-md-history": "Per project. Scans `docs/plans/*.md`, `docs/investigations/*.md`, `CLAUDE.md`, `README.md`. Excludes HISTORY/MEMORY/TODO/memory-visualization basenames. Run `~/SRC/python-tui-lib/scripts/regen-md-history.sh <file>` per item, or use the command block to bulk-fix a project.",
+    "missing-cascade":   "Globals at `~/.claude/projects/-home-will/memory/<name>` → symlinks at `~/<project>/.claude/memory/<name>`. Apply via the recommendation's command block.",
+    "leaked-project-memories": "Source: `~/.claude/memory/<name>` or `~/.claude/projects/-home-will/memory/<name>`. Destination: `~/<owner>/.claude/memory/<name>` as a real file (not a cascade symlink).",
+    "unmirrored-memory": "Loader dir `~/.claude/projects/<slug>/memory` should be a symlink → `~/<project>/.claude/memory`. Drift = it's a real dir (memory un-versioned in the project repo). Command block relocates it + symlinks back. Reference: llvm-mos-65816.",
+    "dup-commands":      "Per-project: `~/<project>/.claude/commands/<name>` — global at `~/.claude/commands/<name>`",
+    "skill-frontmatter": "Global skills: `~/.claude/skills/<name>/SKILL.md`. Project-scope: `~/<project>/.claude/skills/<name>/SKILL.md`.",
+    "missing-md-history": "Per project. Scans `docs/plans/*.md`, `docs/investigations/*.md`, `CLAUDE.md`, `README.md`. Excludes HISTORY/MEMORY/TODO/memory-visualization basenames. Run `~/python-tui-lib/scripts/regen-md-history.sh <file>` per item, or use the command block to bulk-fix a project.",
 }
 
 # One-line description of what each scan looks for — surfaced in the
 # "What we scanned for" section of every report.
 SCAN_DESCRIPTIONS: dict[str, str] = {
-    "missing-path":      "Registry (`projects.json`) entries whose declared `path` isn't a directory on disk. Split into two cases: the project exists at `~/<name>` and only the declared path is stale (fixable — a compat symlink makes its memory reachable), or it isn't checked out here at all (nothing to do). Reported once, and these projects are excluded from every path-dependent scan so they can't manufacture phantom cascade drift.",
+    "missing-path":      "Registry (`projects.json`) entries whose declared `path` isn't a directory on disk. Split into two cases: the project exists at `~/<name>` and only the declared path is stale (fixable — correct the entry's `path` so its memory becomes reachable), or it isn't checked out here at all (nothing to do). Reported once, and these projects are excluded from every path-dependent scan so they can't manufacture phantom cascade drift.",
     "projects-json-contract": "First-party code that reads or writes the shared projects.json but whose README/CLAUDE/setup docs do not link the canonical contract. Registry membership alone does not count.",
     "legacy-root":       "Claude Code reads its global config from $CLAUDE_CONFIG_DIR (live root). This finds global artifacts — skills, commands, memory, hooks, settings keys — that still sit in a pre-move root and are therefore no longer loaded at all. Catches a config-dir migration (e.g. ~/.claude → ~/.config/claude/<account>/) that silently left most of the config behind.",
     "global-hooks":      "Global ~/.claude/settings.json has the expected baseline hooks (transcript-logger, plan-first, plan-migrate, md-preview, etc.)",
     "missing-settings":  "Active projects without their own `.claude/settings.json` (they get the global chain, but can't add their own hooks).",
     "config-drift":      "Per-project settings.json entries that duplicate hooks already fired globally.",
-    "broken-hook-paths": "Hook commands in global or per-project settings.json — plus `md`/other task commands in `~/Taskfile.yml` and `~/SRC/*/Taskfile.yml` — whose referenced `.sh` script doesn't exist on disk after expansion. Catches stale paths left after a python-tui-lib rename (e.g. `md-to-pdf.sh` → `md-to-html.sh`) or env-var typos.",
+    "broken-hook-paths": "Hook commands in global or per-project settings.json — plus `md`/other task commands in `~/Taskfile.yml` and `~/*/Taskfile.yml` — whose referenced `.sh` script doesn't exist on disk after expansion. Catches stale paths left after a python-tui-lib rename (e.g. `md-to-pdf.sh` → `md-to-html.sh`) or env-var typos.",
     "uncommitted":       "Modified or untracked Claude artifacts (skills, commands, memory, hooks, settings) sitting uncommitted in the homedir repo or any project repo — surfaces in-flight work that didn't get a commit.",
     "orphan-plans":      "Markdown files in `~/.claude/plans/` older than the threshold (default 1 day) that look like real plans worth routing.",
     "dup-memories":      "Same-filename `feedback_*.md` across ≥3 real project memory dirs (worktrees excluded) — candidates for promotion to global.",
@@ -220,7 +220,7 @@ SCAN_DESCRIPTIONS: dict[str, str] = {
     "unmirrored-memory": "Per active project: the cwd-siloed loader dir `~/.claude/projects/<slug>/memory` is a real directory instead of a symlink to the project's own repo `.claude/memory/` — so its memory isn't version-controlled in the project repo. Recommends the relocate-to-repo + symlink migration.",
     "dup-commands":      "Commands at `~/.claude/commands/*.md` that also appear in real project dirs (worktrees excluded).",
     "skill-frontmatter": "SKILL.md files missing YAML frontmatter, or whose frontmatter is missing any of name/description/version. Catches skills that slipped in before formalization.",
-    "skill-install-drift": "An installed skill under `~/.claude/skills/` differs from its git-tracked plugin source under `~/SRC/biohack-claude/plugins/*/skills/` — the live copy was edited in place, or the published plugin is stale. Pick the canonical side, sync the other, commit the source.",
+    "skill-install-drift": "An installed skill under `~/.claude/skills/` differs from its git-tracked plugin source under `~/biohack-claude/plugins/*/skills/` — the live copy was edited in place, or the published plugin is stale. Pick the canonical side, sync the other, commit the source.",
     "missing-md-history": "Durable markdown docs (plans, investigations, CLAUDE.md, README.md) without a sibling `HISTORY.md`. The pre-commit hook seeds them on next edit; this scan lets you bulk-fix dormant docs on demand.",
 }
 
@@ -275,10 +275,10 @@ def load_projects() -> list[Project]:
     for entry in raw["projects"]:
         if not entry.get("path"):
             continue   # no local checkout (idea-stage or not-cloned) — nothing to scan
-        # Resolve: the registry may still declare `~/SRC/<name>` compat symlinks
-        # from the ~/SRC → ~/ move. Claude Code keys loader dirs off the real
-        # path, and generated commands should write to the real repo, not through
-        # a symlink that may not exist on the next machine.
+        # Resolve: a declared path may still run through a symlink (a checkout
+        # parked elsewhere, a symlinked $HOME). Claude Code keys loader dirs off
+        # the real path, and generated commands should write to the real repo,
+        # not through a symlink that may not exist on the next machine.
         p = Project(
             name=entry["name"],
             path=Path(os.path.expanduser(entry["path"])).resolve(),
@@ -301,11 +301,10 @@ def on_disk(projects: list[Project]) -> list[Project]:
     Every path-dependent scan must filter through this. A registry entry pointing
     at a missing dir has no `.claude/memory`, so the cascade scan reads *every*
     global as "missing" and reports 19-23 confident findings about a directory
-    that isn't there — noise that buries the real ones. The registry is
-    deliberately left declaring `~/SRC/<name>` paths (see the `home_src_layout`
-    memory: "Don't recreate ~/SRC/<name> dirs or fabricate cascades for absent
-    projects"), so the scanner enforces that rather than trusting a reader to
-    remember it. `scan_missing_project_paths` reports these once instead.
+    that isn't there — noise that buries the real ones. Registry entries also
+    legitimately describe clones that live only on another machine, so a missing
+    dir is never on its own evidence of drift to fix here.
+    `scan_missing_project_paths` reports these once instead.
     """
     return [p for p in projects if p.path.is_dir()]
 
@@ -317,7 +316,7 @@ def _normalize_hook_cmd(cmd: str) -> str:
     """Reduce a hook command to the trailing script's basename.
 
     The trailing token may be a bare basename (`md-preview.sh`) or a full
-    path (`bash $HOME/SRC/python-tui-lib/hooks/md-preview.sh`). Both reduce
+    path (`bash $HOME/python-tui-lib/hooks/md-preview.sh`). Both reduce
     to `md-preview.sh` so the baseline/config-drift scans match a hook by
     name regardless of how its path is written.
     """
@@ -376,7 +375,7 @@ def _suggest_renamed_script(missing_basename: str) -> Optional[str]:
     `scripts/` + `hooks/` to suggest a rename (e.g. `md-to-pdf.sh` →
     `md-to-html.sh`). Matches on shared leading `-`/`_`-delimited tokens; needs
     at least one to avoid noise."""
-    ptl = HOME / "SRC" / "python-tui-lib"
+    ptl = HOME / "python-tui-lib"
     cands: list[str] = []
     for sub in ("scripts", "hooks"):
         d = ptl / sub
@@ -416,7 +415,7 @@ def is_worktree_path(p: Path) -> bool:
     return ".worktrees" in p.parts
 
 
-# Atomic-token formatters (per ~/SRC/CLAUDE.md: NBSP between number+unit;
+# Atomic-token formatters (per ~/CLAUDE.md: NBSP between number+unit;
 # U+2011 non-breaking hyphen in dates / hyphenated identifiers)
 NBSP = " "
 NBHY = "‑"
@@ -477,7 +476,7 @@ def scan_global_hooks_sanity() -> list[Recommendation]:
             details="No global hook chain exists. See plan Parts A, D, E.",
             command_block=(
                 "# Create ~/.claude/settings.json per the plan's Part A wiring.\n"
-                "# Reference: ~/SRC/docs/plans/2026-05-19-globalize-hooks-housekeeping-skill.md"
+                "# Reference: ~/docs/plans/2026-05-19-globalize-hooks-housekeeping-skill.md"
             ),
             severity="regress",
         )]
@@ -587,20 +586,32 @@ def scan_missing_project_paths(projects: list[Project]) -> list[Recommendation]:
 
     stranded = sum(len(list((a / ".claude" / "memory").glob("*.md")))
                    for _, _, a in reloc if (a / ".claude" / "memory").is_dir())
+    reg = shlex.quote(str(PROJECTS_JSON))
+    fix_lines = "\n".join(
+        "tmp=$(mktemp) && jq {filt} {reg} > \"$tmp\" && mv \"$tmp\" {reg}".format(
+            filt=shlex.quote(
+                '(.projects[] | select(.name == "%s") | .path) = "%s"' % (n, _tilde(alt))),
+            reg=reg)
+        for n, _, alt in reloc)
     return [Recommendation(
         category="missing-path",
         title=f"{len(reloc)} registry path(s) stale, {len(absent)} project(s) not on this machine",
         details="\n\n".join(details),
-        row=[str(len(reloc) + len(absent)), "`~/SRC/`", str(len(reloc)), str(len(absent))],
+        row=[str(len(reloc) + len(absent)), "`~/`", str(len(reloc)), str(len(absent))],
         command_block=(
-            "# Relocatable: compat symlink so the registry resolves (preferred here over\n"
-            "# rewriting projects.json — see the `home_src_layout` memory).\n"
-            + "\n".join(f'[ -e {shlex.quote(str(dec))} ] || ln -s {shlex.quote(str(alt))} {shlex.quote(str(dec))}'
-                        for _, dec, alt in reloc)
-            + (f"\n\n# Absent ({len(absent)}): nothing to do — not checked out here.\n"
+            "# Relocatable: the registry's `path` is simply wrong — projects live directly\n"
+            "# at ~/<name>, so correct projects.json rather than papering over it with a\n"
+            "# symlink. Back up first, then rewrite each stale path in place.\n"
+            'BACKUP="$BACKUP_ROOT/missing-path"\n'
+            'mkdir -p "$BACKUP"\n'
+            f'cp -a {reg} "$BACKUP/projects.json"\n\n'
+            + fix_lines
+            + f"\n\njq . {reg} >/dev/null && echo 'valid JSON'\n"
+            + (f"\n# Absent ({len(absent)}): nothing to do — not checked out here.\n"
                if absent else "")
             + "\n# Then re-run housekeeping: the stranded memory above becomes visible,\n"
-              "# and `missing-cascade` will report real numbers for these projects."
+              "# and `missing-cascade` will report real numbers for these projects.\n"
+              f'# Rollback: cp -a "$BACKUP/projects.json" {reg}'
         ) if reloc else "# No action: none of these are checked out on this machine.",
         severity="warn" if reloc else "info",
     )]
@@ -793,7 +804,7 @@ def scan_skill_install_drift() -> list[Recommendation]:
             "# Inspect the divergence (live vs plugin source), then sync the stale side:\n"
             "diff -rq --exclude=.history --exclude=__pycache__ \\\n"
             "  $HOME/.claude/skills/<skill> \\\n"
-            "  $HOME/SRC/biohack-claude/plugins/*/skills/<skill>"
+            "  $HOME/biohack-claude/plugins/*/skills/<skill>"
         ),
         severity="info",
     )]
@@ -1080,7 +1091,7 @@ def scan_leaked_project_memories(projects: list[Project]) -> list[Recommendation
 
     Per the naming-convention principle (see plan
     2026-05-21-migrate-global-memory-canonical.md Phase 1), these prefixes
-    mark memories that should live in `~/SRC/<project>/.claude/memory/` as
+    mark memories that should live in `~/<project>/.claude/memory/` as
     real files, not in `~/.claude/memory/` or the cwd=~ auto-memory dir.
 
     Skips symlinks — those are legitimate cascade artifacts."""
@@ -1099,7 +1110,7 @@ def scan_leaked_project_memories(projects: list[Project]) -> list[Recommendation
                 continue
             owner = _guess_owner_project(f.name, projects)
             dest_cell = (
-                f"→ ~/SRC/{owner}/.claude/memory/"
+                f"→ ~/{owner}/.claude/memory/"
                 if owner else "→ owner unclear; inspect manually"
             )
             recs.append(Recommendation(
@@ -1117,10 +1128,10 @@ def _project_dir_slug(path: Path) -> str:
     """Claude's cwd-siloed auto-memory key: the project path with '/' and '.' -> '-'.
 
     Resolve symlinks first: Claude Code keys the loader dir off the *real* cwd,
-    while projects.json may declare a compat path (`~/SRC/<name>` symlinks left
-    over from the ~/SRC → ~/ move). Slugging the unresolved path yields
-    `-home-will-SRC-foo` and silently matches nothing, which makes every
-    loader-dir scan report a clean zero.
+    while a declared path may reach the repo through a symlink (a checkout parked
+    elsewhere, a symlinked $HOME). Slugging the unresolved path then yields a key
+    Claude never wrote, which silently matches nothing and makes every loader-dir
+    scan report a clean zero.
     """
     try:
         path = path.resolve()
@@ -1184,7 +1195,7 @@ ln -s {repo}/.claude/memory {siloed}
 def scan_unmirrored_project_memory(projects: list[Project]) -> list[Recommendation]:
     """Storage-location drift: a project's cwd-siloed loader dir
     `~/.claude/projects/<slug>/memory` should be a SYMLINK to the project's own
-    repo `~/SRC/<proj>/.claude/memory` — so project-specific memory is
+    repo `~/<proj>/.claude/memory` — so project-specific memory is
     version-controlled in the project repo (and generic memory cascades in as
     symlinks to the `~/.claude/memory` master, scan #9). Drift = the siloed dir
     is a REAL directory: its memory then sits in the gitignored homedir tree,
@@ -1528,11 +1539,15 @@ def scan_broken_hook_paths(projects: list[Project]) -> list[Recommendation]:
     # Taskfiles reference the same shared python-tui-lib scripts the same way
     # (e.g. the `md` task → scripts/md-to-html.sh). A rename there leaves the
     # `cmds:` entry dangling and `task <name>` fails with exit 127 — the same
-    # drift class, so fold it in. Covers ~/Taskfile.yml and ~/SRC/*/Taskfile.yml.
+    # drift class, so fold it in. Covers ~/Taskfile.yml and ~/*/Taskfile.yml
+    # (projects live directly under $HOME, so skip hidden dirs — ~/.claude,
+    # ~/.worktrees, ~/.cache … are not project checkouts).
     taskfiles: list[tuple[str, Path]] = []
     if (HOME / "Taskfile.yml").is_file():
         taskfiles.append(("~", HOME / "Taskfile.yml"))
-    for tf in sorted((HOME / "SRC").glob("*/Taskfile.yml")):
+    for tf in sorted(HOME.glob("*/Taskfile.yml")):
+        if tf.parent.name.startswith("."):
+            continue
         taskfiles.append((tf.parent.name, tf))
 
     for scope_label, tf in taskfiles:
@@ -1659,7 +1674,7 @@ def _git_status_porcelain(repo: Path, scope: str) -> list[tuple[str, str]]:
 def scan_uncommitted_claude_changes(projects: list[Project]) -> list[Recommendation]:
     """Modified or untracked files under `.claude/` in any git-tracked repo.
     Two scopes: homedir repo (covers global `~/.claude/`) and each project's
-    own repo (covers `~/SRC/<project>/.claude/`)."""
+    own repo (covers `~/<project>/.claude/`)."""
     recs: list[Recommendation] = []
     scopes: list[tuple[str, Path]] = []
     if (HOME / ".claude").is_dir():
@@ -1808,7 +1823,7 @@ def cmd_block_route_plan_manual(path: Path) -> str:
 # 1) Inspect content to identify the project
 head -30 '{path}'
 # 2) mv with proper YYYY-MM-DD-<slug>.md naming, e.g.:
-#    mv '{path}' ~/SRC/<project>/docs/plans/$(date +%Y-%m-%d -d @$(stat -c %Y '{path}'))-<slug>.md
+#    mv '{path}' ~/<project>/docs/plans/$(date +%Y-%m-%d -d @$(stat -c %Y '{path}'))-<slug>.md
 # Rollback: mv it back to '{path}'"""
 
 
@@ -1826,9 +1841,9 @@ def cmd_block_seed_md_history(p: Project, missing_by_kind: dict) -> str:
         if missing_by_kind.get(k)
     )
     return f"""# Seed HISTORY.md sidecars in {p.name}: {summary}
-# Calls ~/SRC/python-tui-lib/scripts/regen-md-history.sh per file.
+# Calls ~/python-tui-lib/scripts/regen-md-history.sh per file.
 # Files with no git history yet are skipped silently by the regen script.
-REGEN="$HOME/SRC/python-tui-lib/scripts/regen-md-history.sh"
+REGEN="$HOME/python-tui-lib/scripts/regen-md-history.sh"
 test -x "$REGEN"
 
 for f in \\
@@ -1850,7 +1865,7 @@ def cmd_block_relocate_project_memory(f: Path, owner: Optional[str]) -> str:
     owning project couldn't be guessed, emit a no-op stub that prints the
     file's content for the user to inspect and place manually."""
     if owner:
-        dest = f"$HOME/SRC/{owner}/.claude/memory/{f.name}"
+        dest = f"$HOME/{owner}/.claude/memory/{f.name}"
         return f"""# Relocate project-scope memory {f.name} to its owning project.
 # Source:      {f}
 # Destination: {dest}
@@ -1870,7 +1885,7 @@ echo "OK: moved {f.name} → {dest}"
 # content and decide where it belongs, then mv it manually.
 head -30 '{f}'
 # Suggested action once you've identified the owner:
-#   mv '{f}' $HOME/SRC/<project>/.claude/memory/{f.name}"""
+#   mv '{f}' $HOME/<project>/.claude/memory/{f.name}"""
 
 
 def cmd_block_promote_memory(name: str, locations: list[tuple[Project, Path]], content_identical: bool) -> str:
@@ -1923,7 +1938,7 @@ mkdir -p "$HOME/.claude/memory"
 test -f "{canonical}"
 {symlink_check_lines}
 echo "OK: promoted {name} (canonical + {len(locations)} symlink(s))"
-# Rollback: for f in "$BACKUP"/*.md; do project=$(basename "$f" .md); rm "$HOME/SRC/$project/.claude/memory/{name}"; cp -a "$f" "$HOME/SRC/$project/.claude/memory/{name}"; done"""
+# Rollback: for f in "$BACKUP"/*.md; do project=$(basename "$f" .md); rm "$HOME/$project/.claude/memory/{name}"; cp -a "$f" "$HOME/$project/.claude/memory/{name}"; done"""
 
 
 def cmd_block_cascade_globals(project: Project, missing: list[str], stale: list[str],
@@ -1984,7 +1999,7 @@ def cmd_block_remove_dup_commands(name: str, global_md: Path, duplicates: list[P
 {diff_lines}
 # Then either delete project copies (if diffs are stale) or update global before removing."""
     def proj_of(p: Path) -> str:
-        # ~/SRC/<project>/.claude/commands/<file> → <project>
+        # ~/<project>/.claude/commands/<file> → <project>
         return p.parts[-4] if len(p.parts) >= 4 else p.stem
     cp_lines = "\n".join(f'cp -a "{d}" "$BACKUP/{proj_of(d)}.md"' for d in duplicates)
     rm_lines = "\n".join(f'rm "{d}"' for d in duplicates)
@@ -1999,7 +2014,7 @@ mkdir -p "$BACKUP"
 # Post-check
 {test_lines}
 echo "OK: removed {len(duplicates)} duplicate(s) of {name}"
-# Rollback: for f in "$BACKUP"/*.md; do project=$(basename "$f" .md); cp -a "$f" "$HOME/SRC/$project/.claude/commands/{name}"; done"""
+# Rollback: for f in "$BACKUP"/*.md; do project=$(basename "$f" .md); cp -a "$f" "$HOME/$project/.claude/commands/{name}"; done"""
 
 
 def cmd_block_fix_skill_frontmatter(path: Path, skill_name: str, missing: list[str]) -> str:
@@ -2081,7 +2096,9 @@ def cmd_block_fix_broken_hook(scope_label: str, settings_path: Path,
 #
 # Decide:
 #   1) Dead entry — remove the hook block from settings.json.
-#   2) Wrong path — fix it (e.g. ${{SRC_ROOT:-$HOME/SRC}}/python-tui-lib/hooks/<name>.sh).
+#   2) Wrong path — fix it. Project checkouts sit directly under $HOME, so the
+#      shared-library form is $HOME/python-tui-lib/hooks/<name>.sh; write $HOME
+#      literally rather than reintroducing a ${{VAR:-default}} root indirection.
 #
 # jq-only edit is brittle on nested hook arrays, so hand-edit:
 BACKUP="$BACKUP_ROOT/broken-hook-{backup_tag}"
@@ -2510,7 +2527,7 @@ def build_report(
 
     P.append(render_md_table(headers, rows))
     P.append("")
-    P.append(f"All project paths: `~/SRC/{collapse_paths([p.name for p in projects])}/`")
+    P.append(f"All project paths: `~/{collapse_paths([p.name for p in projects])}/`")
     P.append("")
 
     # ── What we scanned for ───────────────────────────────────────────

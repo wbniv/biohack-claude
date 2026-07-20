@@ -36,6 +36,10 @@ Then install any plugin individually:
 | [`cf-domain-setup`](plugins/cf-domain-setup/) | Add a domain to Cloudflare — scoped token, zone creation, activation polling |
 | [`aws-billing-tags`](plugins/aws-billing-tags/) | Set up AWS cost tracking, billing tags, budget alerts, and Cost Explorer |
 
+`claude-housekeeping` is a read-only consumer of the shared project registry
+`~/.claude/projects.json`; its contract is
+[`homedir/docs/projects-json.md`](https://github.com/wbniv/homedir/blob/main/docs/projects-json.md).
+
 ## ✦ design
 
 | Plugin | What it does |

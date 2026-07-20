@@ -19,4 +19,4 @@ For any non-trivial task in `parking-space`, **start by running `task feature-st
 - Work that's already in progress on `main` when this rule was introduced — finish it where it is, then start using the flow on the next task.
 - Read-only investigation.
 
-**Reference:** [docs/feature-workflow.md](../../../SRC/parking-space/docs/feature-workflow.md), [plans/2026-04-10-feature-worktree-flow.md](../../../SRC/parking-space/plans/2026-04-10-feature-worktree-flow.md).
+**Reference:** [docs/feature-workflow.md](../../../parking-space/docs/feature-workflow.md), [plans/2026-04-10-feature-worktree-flow.md](../../../parking-space/plans/2026-04-10-feature-worktree-flow.md).

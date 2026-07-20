@@ -380,7 +380,7 @@ pre-dismiss it as overkill for a one-person setup.</td></tr>
 <b>How to apply:</b> When an agent or research task returns substantial findings, write the investigation doc immediately and commit it. Keep plan docs focused on decisions; put the supporting evidence in investigations/.</td></tr>
 
 <tr style="background:#f0f0f0"><td>7</td><td><code>feedback_md_to_pdf_after_writes.md</code></td><td>Run md-to-pdf after writing/updating any .md file</td><td>feedback</td><td>WorldFoundry-wbniv</td></tr>
-<tr><td colspan="5">After writing or updating any <code>.md</code> file in <code>/home/will/SRC/WorldFoundry-wbniv</code>, run <code>task md -- <path1> [<path2> ...]</code> (which calls <code>../python-tui-lib/scripts/md-to-pdf.sh</code>) without being asked. Multiple files in one invocation is fine and preferred.<br/><br/>
+<tr><td colspan="5">After writing or updating any <code>.md</code> file in <code>/home/will/WorldFoundry-wbniv</code>, run <code>task md -- <path1> [<path2> ...]</code> (which calls <code>../python-tui-lib/scripts/md-to-pdf.sh</code>) without being asked. Multiple files in one invocation is fine and preferred.<br/><br/>
 
 <b>Why:</b> User expectation; they want to see the rendered output without having to ask each time. Confirmed 2026-04-28 after the user explicitly reminded me ("you're supposed to do this every time you write/update an .md file").<br/><br/>
 
@@ -458,7 +458,7 @@ Test count: <b>98</b> across four locations (reaction 15, image 22, worst-take-w
 
 <b>How to apply:</b> When user returns to Phase 1d, check the Cast picker first; only debug if propagation genuinely is done. Launch commands: <code>cd party-games/platform/server && WF_GAME=worst-take-wins node index.js</code> (or reaction / image / none).<br/><br/>
 
-<b>Stable public URL (as of 2026-04-24):</b> <code>https://pg.rapid-raccoon.com</code> — named Cloudflare Tunnel <code>party-games</code> on this laptop → <code>localhost:8080</code>. Replaces the old rotating trycloudflare.com quick tunnels. Cast Console receiver URL is now <code>https://pg.rapid-raccoon.com/receiver</code> (set 2026-04-24). Don't cycle the Cast Console URL any more — stable now, no more restarting the propagation clock. Setup script: <code>~/SRC/bumper2bumper/scripts/cloudflare-create-named-tunnel.sh</code>. Config at <code>~/.cloudflared/config.yml</code>; tunnel runs by hand (<code>cloudflared tunnel run party-games</code>) until Party Games relay moves to an AWS server (TODO in migration plan).<br/><br/>
+<b>Stable public URL (as of 2026-04-24):</b> <code>https://pg.rapid-raccoon.com</code> — named Cloudflare Tunnel <code>party-games</code> on this laptop → <code>localhost:8080</code>. Replaces the old rotating trycloudflare.com quick tunnels. Cast Console receiver URL is now <code>https://pg.rapid-raccoon.com/receiver</code> (set 2026-04-24). Don't cycle the Cast Console URL any more — stable now, no more restarting the propagation clock. Setup script: <code>~/bumper2bumper/scripts/cloudflare-create-named-tunnel.sh</code>. Config at <code>~/.cloudflared/config.yml</code>; tunnel runs by hand (<code>cloudflared tunnel run party-games</code>) until Party Games relay moves to an AWS server (TODO in migration plan).<br/><br/>
 
 <b>Explicit castAppId while propagation is pending:</b> during the propagation window, always include <code>&castAppId=071CDEDD</code> on controller test URLs — the explicit param is the only reliable path on-device, not the hardcoded default in <code>controller.js:22</code>. URL form: <code>https://pg.rapid-raccoon.com/controller?name=<n>&castAppId=071CDEDD</code>. Drop this once Phase 1d hardware acceptance passes. And: do not volunteer laptop-Linux-Chrome-Cast-discovery debugging as a first move — the real constraint is the Cast Console propagation clock, not desktop discovery flakiness.<br/><br/>
 
@@ -528,10 +528,10 @@ Things to remember next time Cast registration is involved:<br/><br/>
 <tr><td colspan="5">The user maintains a cross-project glossary at:<br/><br/>
 
 ```
-/home/will/SRC/docs/glossary.md
+/home/will/docs/glossary.md
 ```<br/><br/>
 
-It defines terms used across all projects under <code>~/SRC/</code> in the way the user actually uses them — not textbook definitions. Two-column markdown layout, alphabetically ordered. Examples of entries: bake, blast radius, fan out, fix forward, golden path, sweep, surface, teardown.<br/><br/>
+It defines terms used across all projects under <code>~/</code> in the way the user actually uses them — not textbook definitions. Two-column markdown layout, alphabetically ordered. Examples of entries: bake, blast radius, fan out, fix forward, golden path, sweep, surface, teardown.<br/><br/>
 
 When the user asks to "add X to the glossary", this is the file. Do not store glossary entries in auto-memory — they belong in the doc so future-you (and the user) can browse them in one place.</td></tr>
 
@@ -615,7 +615,7 @@ files you modified, verify git diff --cached matches what you touched, and leave
 any other in-progress changes unstaged."<br/><br/>
 
 Specific incident (2026-05-08): Previous message had listed two specific
-preserved-unstaged files (<code>SRC/free-services.md</code>, <code>MEMORY.md</code>). User said
+preserved-unstaged files (<code>docs/free-services.md</code>, <code>MEMORY.md</code>). User said
 "commit the others, sure". I read "the others" as "every pending modification
 in the repo" and made 6 commits spanning settings.json, glossary, three
 projects' memory dirs, and an investigation doc. User had to ask for a revert.
@@ -660,7 +660,7 @@ Note on Oracle Cloud: the "Always Free" 4-core ARM VM is widely cited as a gener
 
 If it's a URL, link it. If it's a name that maps to a URL, link it with that URL. <b>Bare names or URLs in plain text are a defect.</b><br/><br/>
 
-Use <b><code>[label](url)</code></b> form. Never use <b><code><https://…></code></b> shorthand: the shared <code>~/SRC/python-tui-lib/scripts/md-to-pdf.sh</code> regex (<code>re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)</code>) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. <code>clerk.com</code> linking to <code>https://clerk.com</code> or <code>localhost:4321/colophon</code> linking to <code>http://localhost:4321/colophon</code>), still write it as <code>[label](url)</code>.<br/><br/>
+Use <b><code>[label](url)</code></b> form. Never use <b><code><https://…></code></b> shorthand: the shared <code>~/python-tui-lib/scripts/md-to-pdf.sh</code> regex (<code>re.sub(r'\[([^\]]+)\]\(([^)]+)\)', ...)</code>) has no rule for angle-bracket autolinks and silently drops them, leaving a blank where the URL should be. Even when the URL is the label (e.g. <code>clerk.com</code> linking to <code>https://clerk.com</code> or <code>localhost:4321/colophon</code> linking to <code>http://localhost:4321/colophon</code>), still write it as <code>[label](url)</code>.<br/><br/>
 
 # Why this gets its own loud memory<br/><br/>
 
@@ -716,7 +716,7 @@ The declarative-state mode is the more painful one because the assertion gets ba
 
 <b>Why:</b> When offered A (targeted) vs B (proper) for the indri.studio cross-page header animation issue, I marked A as "recommended" and B as a "bigger architectural call." Will responded: *"i want it solved properly, ofc. have we met? heh. remember that"* — making clear this is a standing preference, not specific to that one decision. The minimal fix is a workaround; the proper fix removes the underlying constraint.<br/><br/>
 
-<b>How to apply:</b> When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from <code>~/SRC/CLAUDE.md</code> ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.</td></tr>
+<b>How to apply:</b> When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from <code>~/CLAUDE.md</code> ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.</td></tr>
 
 <tr><td>28</td><td><code>feedback_public_vs_internal_surfaces.md</code></td><td>feedback-public-vs-internal-surfaces</td><td>unknown</td><td><i style="color:#888">general</i></td></tr>
 <tr><td colspan="5">When drafting copy for public-facing pages, keep internal/infrastructure details out. Audit for and cut: repo URLs, predecessor-project references, deploy pipeline specifics, SSM/IaC paths, the names of internal companion projects (e.g. "finding-your-way's infrastructure pattern"), and "where the source code lives" links. The colophon is the obvious trap — a colophon describes the *visible craft* (type, palette, stack at a high level), not the development infrastructure.<br/><br/>
@@ -765,7 +765,7 @@ briefly — don't oversell.<br/><br/>
 
 <b>Why:</b> Will pushed back on <code>@vite-pwa/astro</code> with "we've made several PWA apps
 together already and it didn't seem to be painful." Reference projects:
-<code>~/SRC/parking-space</code> and <code>~/SRC/gustos-colores</code>. He finds framework-wrapper convenience
+<code>~/parking-space</code> and <code>~/gustos-colores</code>. He finds framework-wrapper convenience
 less valuable than a stable, portable, well-understood pattern across projects.<br/><br/>
 
 <b>How to apply:</b> Before recommending an integration library (vite plugins, framework
@@ -818,8 +818,8 @@ the start of multi-step arcs, not a reaction.<br/><br/>
 <tr style="background:#f0f0f0"><td>35</td><td><code>project_finding_your_way.md</code></td><td>Finding Your Way — Parmenides game port</td><td>project</td><td>finding-your-way</td></tr>
 <tr><td colspan="5"><b>Fact:</b> The author of "Parmenides: Finding Your Way" asked Will to convert the
 original 2005 hypertext (144 HTM pages + 19 images, pure hyperlink DAG — no scripts)
-into a modern interactive game. Work lives at <code>~/SRC/finding-your-way/</code>. Plan at
-<code>~/SRC/finding-your-way/docs/plans/PLAN.md</code> — verify against the file rather than
+into a modern interactive game. Work lives at <code>~/finding-your-way/</code>. Plan at
+<code>~/finding-your-way/docs/plans/PLAN.md</code> — verify against the file rather than
 trusting this memory for current scope.<br/><br/>
 
 <b>Phase plan (as of 2026-04-25, was originally 5 phases, now 7):</b>
@@ -848,7 +848,7 @@ philosopher-themed branching narrative; the author wants it accessible again.<br
 <b>Timeline:</b> Author's original request dates to 2023-11-19 (confirmed by Will 2026-04-20). No active deadline — pacing is self-directed. Use this to inform scope decisions: favor doing each phase right over shipping fast.<br/><br/>
 
 <b>How to apply:</b> If user mentions "Parmenides", "finding your way", "temple hub",
-"four realms", "Being/Not-Being", or references <code>~/SRC/finding-your-way/</code>, this is
+"four realms", "Being/Not-Being", or references <code>~/finding-your-way/</code>, this is
 the project. Read <code>docs/plans/PLAN.md</code> first before making suggestions — it has more
 detail than this memory and is kept current.</td></tr>
 
@@ -936,7 +936,7 @@ pre-dismiss it as overkill for a one-person setup.
 **File:** `feedback_md_to_pdf_after_writes.md`
 **Description:** After any Write/Edit to a markdown file in this repo, run `task md -- <path>` to render and open it; the user expects this every time
 
-> After writing or updating any `.md` file in `/home/will/SRC/WorldFoundry-wbniv`, run `task md -- <path1> [<path2> ...]` (which calls `../python-tui-lib/scripts/md-to-pdf.sh`) without being asked. M...
+> After writing or updating any `.md` file in `/home/will/WorldFoundry-wbniv`, run `task md -- <path1> [<path2> ...]` (which calls `../python-tui-lib/scripts/md-to-pdf.sh`) without being asked. M...
 
 **Why:** User expectation; they want to see the rendered output without having to ask each time. Confirmed 2026-04-28 after the user explicitly reminded me ("you're supposed to do this every time you write/update an .md file").
 **How to apply:** - Triggers on any `Write` or `Edit` to `*.md` files inside this repo (docs/, etc.). Includes the README updates.
@@ -1013,7 +1013,7 @@ files you modified, verify git diff --cached matches what you touched, and leave
 any other in-progress changes unstaged."
 
 Specific incident (2026-05-08): Previous message had listed two specific
-preserved-unstaged files (`SRC/free-services.md`, `MEMORY.md`). User said
+preserved-unstaged files (`docs/free-services.md`, `MEMORY.md`). User said
 "commit the others, sure". I read "the others" as "every pending modification
 in the repo" and made 6 commits spanning settings.json, glossary, three
 projects' memory dirs, and an investigation doc. User had to ask for a revert.
@@ -1074,7 +1074,7 @@ The declarative-state mode is the more painful one because the assertion gets ba
 
 **Why:** Will pushed back on `@vite-pwa/astro` with "we've made several PWA apps
 together already and it didn't seem to be painful." Reference projects:
-`~/SRC/parking-space` and `~/SRC/gustos-colores`. He finds framework-wrapper convenience
+`~/parking-space` and `~/gustos-colores`. He finds framework-wrapper convenience
 less valuable than a stable, portable, well-understood pattern across projects.
 **How to apply:** Before recommending an integration library (vite plugins, framework
 integrations, wrapper SDKs), ask: does Will already do this manually in another
@@ -1169,7 +1169,7 @@ the start of multi-step arcs, not a reaction.
 
 ### Finding Your Way — Parmenides game port
 **File:** `project_finding_your_way.md`
-**Description:** Author-commissioned modernization of 2005 hypertext philosophy game "Parmenides: Finding Your Way" into a web app at ~/SRC/finding-your-way/
+**Description:** Author-commissioned modernization of 2005 hypertext philosophy game "Parmenides: Finding Your Way" into a web app at ~/finding-your-way/
 
 > **Fact:** The author of "Parmenides: Finding Your Way" asked Will to convert the
 
@@ -1177,7 +1177,7 @@ the start of multi-step arcs, not a reaction.
 (Twine/Ink/Inform) was considered and rejected as needless indirection. A retired
 philosopher-themed branching narrative; the author wants it accessible again.
 **How to apply:** If user mentions "Parmenides", "finding your way", "temple hub",
-"four realms", "Being/Not-Being", or references `~/SRC/finding-your-way/`, this is
+"four realms", "Being/Not-Being", or references `~/finding-your-way/`, this is
 the project. Read `docs/plans/PLAN.md` first before making suggestions — it has more
 detail than this memory and is kept current.
 
@@ -1221,7 +1221,7 @@ detail than this memory and is kept current.
 
 ### Cross-project glossary location
 **File:** `reference_glossary.md`
-**Description:** The canonical glossary of project-specific terms lives at /home/will/SRC/docs/glossary.md, not in memory. Add new terms there.
+**Description:** The canonical glossary of project-specific terms lives at /home/will/docs/glossary.md, not in memory. Add new terms there.
 
 > The user maintains a cross-project glossary at:
 
@@ -1259,7 +1259,7 @@ detail than this memory and is kept current.
 > When presenting fix options between a minimal/targeted fix and a proper/architectural one, **default to the proper one**. Don't lead with the minimal fix as "recommended" just because it's smaller....
 
 **Why:** When offered A (targeted) vs B (proper) for the indri.studio cross-page header animation issue, I marked A as "recommended" and B as a "bigger architectural call." Will responded: *"i want it solved properly, ofc. have we met? heh. remember that"* — making clear this is a standing preference, not specific to that one decision. The minimal fix is a workaround; the proper fix removes the underlying constraint.
-**How to apply:** When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from `~/SRC/CLAUDE.md` ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.
+**How to apply:** When framing fix options, lead with the architectural answer. Only suggest the targeted version if it offers something the proper version doesn't (e.g., reversibility, lower risk under a deadline). Don't preemptively shrink scope to "save effort" — Will sees that as anchoring on the wrong default. Related: [[feedback-renaming-and-refactors-welcome]] cascade rule from `~/CLAUDE.md` ("Renaming and large refactors are welcome. The only constraint is nothing breaks.") — same shape, applied to all sized changes.
 
 ### feedback-public-vs-internal-surfaces
 **File:** `feedback_public_vs_internal_surfaces.md`

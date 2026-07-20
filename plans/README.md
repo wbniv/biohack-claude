@@ -1,9 +1,9 @@
 # plans/ — Curated plan exemplars (reference only)
 
 Plans are how Will thinks through non-trivial changes before touching code —
-see the plan-first workflow in [CLAUDE.md](https://github.com/wbniv/SRC/blob/main/CLAUDE.md).
+see the plan-first workflow in [CLAUDE.md](https://github.com/wbniv/homedir/blob/main/CLAUDE.md).
 
-The `~/.claude/plans/` and `~/SRC/*/docs/plans/` directories hold hundreds of plans,
+The `~/.claude/plans/` and `~/*/docs/plans/` directories hold hundreds of plans,
 many half-formed or abandoned. The ones published here are **hand-picked exemplars**
 that illustrate the workflow well.
 

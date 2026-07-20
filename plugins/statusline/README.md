@@ -3,7 +3,7 @@
 A two-line [Claude Code](https://claude.ai/code) status line.
 
 ```
-[work] ⏺ Opus ⏺ high ⏺ ~/SRC/biohack-claude (main) ±3 ↑1
+[work] ⏺ Opus ⏺ high ⏺ ~/biohack-claude (main) ±3 ↑1
 ctx ▬▬▬─ 38% ⏺ 5h ▬▬▬▬ 73% ↺2h15m ⏺ 7d ▬─── 23% ⏺ $1.23
 ```
 

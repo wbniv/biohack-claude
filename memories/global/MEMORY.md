@@ -5,7 +5,7 @@
 - [user_mammouth_subscription.md](user_mammouth_subscription.md) — €20/mo Mammouth.ai Standard: multi-model API (GPT-4o, Claude, Gemini, Mistral, Llama) at api.mammouth.ai/v1
 
 ## Project
-- [home_src_layout.md](home_src_layout.md) — Projects moved ~/SRC/<name> → ~/<name> post-reformat; projects.json + hook-runner still assume ~/SRC (hook-runner patched via symlink)
+- [home_src_layout.md](home_src_layout.md) — Flat layout: ~/SRC is gone (removed 2026-07-19); every project lives at ~/<name>, shared docs at ~/CLAUDE.md + ~/docs/ — never recreate an SRC compat path
 
 ## Feedback
 - [feedback_wayland_keybindings.md](feedback_wayland_keybindings.md) — How held modifiers combine with ydotool on GNOME Wayland; architecture for tab switching across apps
