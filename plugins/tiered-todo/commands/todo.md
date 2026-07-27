@@ -175,11 +175,17 @@ This is a large structural rewrite — make ONE Write of the whole file, not man
 
 ### Format rules (all operations)
 
-- The four top-level sections are fixed: `## Open`, `## Watch`, `## Parked`, `## Done`. Do not add others.
+- The four top-level sections are fixed: `## Open`, `## Watch`, `## Parked`, `## Done`. Do not add others. (`## Inbox` is the one exception — it is machine-owned by `audit-plan-deferrals.sh`; leave it alone.)
 - `## Open` → `###` subsections → open items only. No `[x]` items ever, tiered or not.
-- `## Watch` → `###` subsections → plain `- ` bullets (what to check + trigger condition).
-- `## Parked` → `###` subsections → plain `- ` bullets (no checkbox). No `[x]` items.
+- `## Watch` → `###` subsections → plain `- ` bullets (what to check + trigger condition). **No checkbox, no tier.**
+- `## Parked` → `###` subsections → plain `- ` bullets. **No checkbox, no tier.** No `[x]` items.
 - `## Done` → flat list of `- [x] YYYY-MM-DD — [slug] …` lines, newest first, **no tier**.
+
+**Only `## Open` carries tiers.** A tier is a dispatch instruction, and Watch/Parked/Done
+items are not dispatchable — you cannot `/next` something you are merely monitoring. Drop
+the tier when an item leaves Open, and **rank it fresh when it comes back**: a tier
+assigned before the work was shelved is stale by the time the trigger fires, and the
+circumstances that unpark it are usually what changes the answer.
 - Backticks for code/paths/commands. Relative `[text](path)` links, never bare paths.
 
 **Marker grammar.** The status bracket carries status *and* delegation tier, tier last,
