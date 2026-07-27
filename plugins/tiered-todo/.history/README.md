@@ -1,8 +1,14 @@
 | Date | Change |
 |------|--------|
+| [2026-07-26](https://github.com/wbniv/biohack-claude/commit/5ce5588) | tiered-todo: ranking is T5, never delegated |
 | [2026-07-26](https://github.com/wbniv/biohack-claude/commit/f92c21e) | Add the tiered-todo plugin; retire biohack-shell's stale /todo and /verify |
 
 <!--history-meta v1
+5ce5588	author	Will Norris
+5ce5588	added	7
+5ce5588	deleted	0
+5ce5588	files	1
+5ce5588	body	Regenerated from the live files, plus the hand-written README section. The rubric\nranked tasks but never ranked ranking, and the spawn-cost heuristic implied a\nlarge sweep should be dispatched — it must not be. The classifier is the control\nplane and stays with the orchestrator at any scale.\n\nCo-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_018op2irWiReK8tUe9WyuBeg
 f92c21e	author	Will Norris
 f92c21e	added	138
 f92c21e	deleted	0

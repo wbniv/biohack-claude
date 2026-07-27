@@ -113,6 +113,15 @@ The loop is `/todo` → `/next` → `/verify` → `/todo done:`.
   orchestrator model as a subagent. T5 means *do it yourself*, not *spawn a copy of
   yourself*. Matcher is `Agent` rather than `Task` because some plugins rewrite `Task`
   matchers on the fly.
+- **`rank-requires-fable.sh`** (`PreToolUse[Write|Edit]`) — denies any write that *adds*
+  a tier marker to a `TODO.md` when the acting model is not the designated orchestrator.
+  It resolves the model from the transcript's most recent assistant message, which catches
+  both failure modes at once: an orchestrator that has been `/model`-switched away, and a
+  subagent attempting to rank (a subagent's transcript reports its own model). Moving,
+  reformatting, or stripping existing tiers is untouched — only adding a new one is
+  blocked — so sweep agents that re-organise a file without ranking it are unaffected.
+  Fails open when the model can't be determined; it is a workflow guard, not a security
+  boundary. **Retuning:** the allowed-model check is one `grep -qiE 'fable'` near the top.
 - **`todo-reminder.sh`** (`Stop`) — injects up to five open items, with their tiers, so
   "what's next?" pulls from the backlog instead of prompting open-ended.
 

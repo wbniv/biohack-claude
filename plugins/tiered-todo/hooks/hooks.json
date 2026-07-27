@@ -1,5 +1,5 @@
 {
-  "description": "Tiered-TODO delegation — block Fable subagents, surface open TODO items with their tiers",
+  "description": "Tiered-TODO delegation — block Fable subagents, restrict ranking to Fable, surface open TODO items with their tiers",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,6 +8,16 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/no-fable-subagent.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/rank-requires-fable.sh\"",
             "timeout": 5
           }
         ]
