@@ -129,6 +129,7 @@ def scan(path):
     in_inbox = False
     seen_sections = []
     done_dates = []
+    nocheck = []          # Done bullets with no [x], reported once per file
 
     disabled = set()
     for d in DIRECTIVE_RE.findall(text):
@@ -173,6 +174,12 @@ def scan(path):
 
         m = parse_marker(raw)
         if m is None:
+            # A `## Done` entry with no checkbox is invisible to parse_marker, so
+            # every marker-based check silently skipped it. llvm-mos-65816's Done
+            # section is 728 lines with only 5 `- [x]` entries — the rest use a
+            # bare `- YYYY-MM-DD — [slug] …` form and were never inspected at all.
+            if section == "Done" and re.match(r"\s*[-*] \S", raw):
+                nocheck.append(i)
             continue
 
         if m.done and section != "Done":
@@ -202,6 +209,15 @@ def scan(path):
     for ln, n in seen_sections:
         if n not in BUCKETS and n not in SANCTIONED_EXTRA:
             add("WARN", "sections", ln, f"unexpected top-level ## {n}")
+
+    # One finding, not one per line: a file using the no-checkbox Done form does
+    # so systematically (llvm-mos-65816 has ~120), and 120 warnings for a single
+    # consistency decision buries every other finding in the file.
+    if nocheck:
+        add("WARN", "done-form", nocheck[0],
+            f"{len(nocheck)} Done entries have no `[x]` checkbox (first at :{nocheck[0]}, "
+            f"last at :{nocheck[-1]}) — this file mixes two Done forms. Pick one; "
+            "`- [x] YYYY-MM-DD — [slug] …` is canonical.")
 
     for (l1, d1), (_, d2) in zip(done_dates, done_dates[1:]):
         if "?" not in d1 and "?" not in d2 and d1 < d2:
