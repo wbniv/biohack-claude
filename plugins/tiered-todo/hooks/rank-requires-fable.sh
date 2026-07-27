@@ -48,6 +48,14 @@ input=$(cat)
 file=$(echo "$input" | jq -r '.tool_input.file_path // empty')
 [[ "$file" == *TODO.md ]] || exit 0
 
+# A TODO.md under templates/ is documentation, not a backlog: the skeleton
+# documents the tier grammar and necessarily contains example markers like
+# [T4] / [wip T2]. Those are not rankings, so they must not trip the guard.
+# (Found by the guard itself, which blocked the template being written.)
+case "$file" in
+    */templates/*) exit 0 ;;
+esac
+
 # --- resolve the acting model from the transcript -------------------------
 transcript=$(echo "$input" | jq -r '.transcript_path // empty')
 [[ -n "$transcript" && -f "$transcript" ]] || exit 0   # fail open
@@ -63,12 +71,18 @@ if echo "$model" | grep -qiE 'fable'; then
 fi
 
 # --- would this operation ADD a tier? -------------------------------------
-TIER='\[(x|X|wip|verify)?[[:space:]]*T[0-5][[:space:]]*\]'
+# A tier is only a *ranking* when it is the marker of a list item at line start.
+# Anchoring matters: every TODO.md scaffolded from the template documents the
+# grammar in its header ("tier last — `[T4]`, `[wip T2]`, `[verify T3]`"), and an
+# unanchored pattern counted those three as three new rankings and denied the
+# write. Markdown table rows (`| \`- [T4]\` | … |`) are excluded for the same
+# reason — they start with `|`, not a bullet.
+TIER='^[[:space:]]*[-*] \[(x|X|wip|verify)?[[:space:]]*T[0-5][[:space:]]*\]'
 
 # `grep` exits 1 on no-match, which under `set -o pipefail` fails the whole
 # pipeline. Guard the grep itself with `|| true` — putting `|| echo 0` after
 # `wc -l` instead yields the string "0\n0", since wc already printed its own 0.
-count() { { grep -oE "$TIER" <<<"${1:-}" || true; } | wc -l; }
+count() { { grep -cE "$TIER" <<<"${1:-}" || true; } | head -1; }
 
 tool=$(echo "$input" | jq -r '.tool_name // empty')
 case "$tool" in
