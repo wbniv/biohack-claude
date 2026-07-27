@@ -145,6 +145,11 @@ When `$ARGUMENTS` is `sweep` or `cleanup`: reconcile the whole file into the fou
 model in one pass. Use this to migrate a legacy TODO (topical sections, `- [x]` scattered
 inline) or to tidy drift.
 
+**First, check the file is ours.** Run `python3 ~/python-tui-lib/scripts/todo-lint.py TODO.md`
+— if it reports `not-ours`, **stop**. In a fork, `TODO.md` is upstream's roadmap; sweeping it
+rewrites a file we don't own, injects our tier vocabulary into a foreign repo, and conflicts
+on every upstream sync. Say so and leave it alone.
+
 1. **Classify every item** by its current marker and wording, then route it:
    - `- [x]`, `- [cancelled]`, `- [investigated → DONE]` → **`## Done`**.
    - `- [ ]`, `- [~]` / `- [wip]` (in-progress), `- [verify]` → **`## Open`** (under a `###`

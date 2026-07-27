@@ -32,7 +32,9 @@ is T5 and belongs to the orchestrator.
 """
 
 import argparse
+import collections
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +75,51 @@ class Finding:
         return f"  {self.level:<5} {self.check:<11}{loc:<7} {self.msg}"
 
 
+def upstream_authored(path):
+    """Return the foreign author of `path` if it looks like it isn't ours.
+
+    A fork of somebody else's project carries THEIR TODO.md — an upstream
+    roadmap, not our backlog. Reformatting it into the four-bucket model injects
+    our delegation-tier vocabulary into a foreign repo, conflicts on every
+    upstream sync, and rewrites a file we do not own.
+
+    Learned the hard way: `~/tilemap-studio` is a fork of Rangi42/tilemap-studio
+    (409 commits, 1 of them ours) and its `## Features` wishlist was authored by
+    Rangi in 2019. A sweep rewrote and pushed it before anyone noticed.
+
+    The test is simply: **did we create this file?** Whoever made the first
+    commit touching it owns it. If that is not us, we inherited it.
+
+    An earlier version compared the file's first author to the repo's *dominant*
+    author, which is inverted and wrong in both directions: tilemap-studio's
+    TODO.md is Rangi's AND Rangi dominates the repo, so it stayed silent on the
+    one real case; while wla-dx (a fork of vhelin/wla-dx where we added our own
+    TODO.md to track upstream contributions) got flagged for a file that is ours.
+    Ownership is about who wrote the file, not who wrote the repo.
+    """
+    d = str(Path(path).resolve().parent)
+
+    def git(*args):
+        return subprocess.run(["git", "-C", d, *args],
+                              capture_output=True, text=True, timeout=10).stdout
+
+    try:
+        first = next((l.strip() for l in
+                      git("log", "--reverse", "--format=%an", "--", str(path)).splitlines()
+                      if l.strip()), "")
+        us = git("config", "user.name").strip()
+        authors = [l for l in git("log", "--format=%an").splitlines() if l.strip()]
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if not first or not us or first == us:
+        return None
+    # Report our share too — it is what makes "this is somebody else's project"
+    # concrete rather than an assertion.
+    share = collections.Counter(authors)[us] if authors else 0
+    return f"{first} (ours: {share}/{len(authors)} commits)"
+
+
 def scan(path):
     """Return (findings, lines). Pure — no mutation."""
     text = Path(path).read_text(errors="replace")
@@ -90,6 +137,18 @@ def scan(path):
     def add(level, check, line, msg):
         if check not in disabled:
             out.append(Finding(level, check, line, msg))
+
+    foreign = upstream_authored(path)
+    if foreign:
+        # Report and stop. Every other check would just be noise telling us to
+        # reformat somebody else's roadmap into our vocabulary.
+        add("ERROR", "not-ours", 0,
+            f"this TODO.md was created by {foreign} — we did not write it. It is "
+            "UPSTREAM's roadmap in a fork. Do NOT sweep, rank, or reformat it: that "
+            "rewrites a file we don't own, injects our tier vocabulary into a foreign "
+            "repo, and conflicts on every upstream sync. Track our own work in docs/ "
+            "or a differently-named file.")
+        return out, lines
 
     for i, raw in enumerate(lines, 1):
         if "BEGIN auto-captured-deferrals" in raw:

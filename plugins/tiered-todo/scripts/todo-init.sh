@@ -70,6 +70,22 @@ DIR=$(cd -- "$DIR" && pwd)
 PROJECT=$(basename "$DIR")
 TODO="$DIR/TODO.md"
 
+# Refuse inside a fork whose TODO.md we did not write. That file is upstream's
+# roadmap; scaffolding over it rewrites something we don't own and conflicts on
+# every upstream sync. ~/tilemap-studio is the case that taught us — a fork of
+# Rangi42/tilemap-studio whose `## Features` wishlist Rangi wrote in 2019.
+if [[ -f "$TODO" ]] && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    first=$(git -C "$DIR" log --reverse --format='%an' -- TODO.md 2>/dev/null | head -1)
+    us=$(git -C "$DIR" config user.name 2>/dev/null || true)
+    if [[ -n "$first" && -n "$us" && "$first" != "$us" ]]; then
+        echo "todo-init: refusing — $TODO was created by '$first', not you." >&2
+        echo "  This looks like a fork carrying UPSTREAM's TODO. Track our work in" >&2
+        echo "  docs/ or a differently-named file instead of rewriting theirs." >&2
+        echo "  Override with --force only if you are certain the file is ours." >&2
+        exit 1
+    fi
+fi
+
 # --- TODO.md ---------------------------------------------------------------
 if [[ -s "$TODO" && "$FORCE" -eq 0 ]]; then
     echo "todo-init: $TODO already exists and is non-empty — not overwriting." >&2
@@ -96,16 +112,32 @@ if [[ -n "$PLAN" ]]; then
     plan_path="$DIR/docs/plans/$today-$slug.md"
     title="${PLAN^}"   # capitalise first char; bash builtin beats a sed round-trip
 
+    # The co-named bundle dir: md-to-html.sh renders any FOO.md's sibling FOO/
+    # as an asset panel, embedding self-contained .html as a live iframe. It is
+    # scaffolded up front so mockups are the default, not something remembered.
+    bundle_dir="${plan_path%.md}"
+
     if [[ -e "$plan_path" && "$FORCE" -eq 0 ]]; then
         echo "todo-init: $plan_path already exists — not overwriting." >&2
     elif [[ "$DRY" -eq 1 ]]; then
         echo "--- would write $plan_path ---"
+        echo "--- would write $bundle_dir/mockup.html ---"
     else
-        mkdir -p "$(dirname "$plan_path")"
+        mkdir -p "$(dirname "$plan_path")" "$bundle_dir"
         sed "s|{{TITLE}}|$title|g" "$TEMPLATES/plan.md" > "$plan_path"
         echo "todo-init: wrote $plan_path"
+        if [[ -e "$bundle_dir/mockup.html" && "$FORCE" -eq 0 ]]; then
+            echo "todo-init: $bundle_dir/mockup.html already exists — not overwriting." >&2
+        else
+            sed "s|{{TITLE}}|$title|g" "$TEMPLATES/mockup.html" > "$bundle_dir/mockup.html"
+            echo "todo-init: wrote $bundle_dir/mockup.html"
+        fi
     fi
 
+    echo
+    echo "Mockups: edit $bundle_dir/mockup.html (self-contained, 1440x900), rename it"
+    echo "per screen, and save a same-basename .png beside each. Preview the whole plan:"
+    echo "  task md -- ${plan_path#"$DIR"/}"
     echo
     echo "Add this to ## Open (rank it yourself — ranking is T5, never delegated):"
     echo "  - [ ] **$title** — one-line explanation. [plan](docs/plans/$today-$slug.md)"
