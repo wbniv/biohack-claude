@@ -32,6 +32,13 @@ never a bad commit.
 depends on the whole session's history, decisions about the plan itself, final
 integration and review — and anything cheaper to finish than to brief.
 
+**Ranking is itself T5, at any scale.** The orchestrator assigns tiers inline and never
+delegates that step — not for one item, not for a 200-item sweep. The classifier is the
+control plane, so a mis-rank is a systematic error that misroutes everything downstream;
+good ranking needs session context a cold-started subagent does not have; and delegating
+"decide how much thinking this needs" is self-referential. Volume never converts ranking
+into delegable work — that is the one place the spawn-cost heuristic does not apply.
+
 ---
 
 ## The two things that don't happen by default

@@ -50,6 +50,10 @@ An unranked item (`- [ ]`) defaults to **T3**, but do not just accept the defaul
 rank it properly against the rubric in `/todo`, then **write the tier back into
 `TODO.md`** before dispatching. State the rank and a one-line reason.
 
+**You do this yourself, inline. Ranking is T5 and is never delegated** — deciding the tier
+is the step that routes everything after it, and it cannot be handed to the thing being
+routed. Only dispatch once the tier is settled.
+
 ---
 
 ### 3. Dispatch

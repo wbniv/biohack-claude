@@ -62,11 +62,20 @@ in `~/CLAUDE.md` — Delegation.
 When genuinely torn between two tiers, take the **higher** one: over-ranking wastes
 tokens, under-ranking produces a confident wrong edit.
 
+**Do the ranking yourself, inline. Ranking is T5 and is never delegated** — not for one
+item, not for a 200-item sweep across every repo. The classifier is the control plane: a
+mis-rank misroutes everything downstream, and a subagent lacks exactly what good ranking
+needs (what the user cares about now, what is in flight, what the linked plan says). Bulk
+does not convert ranking into delegable work. See `~/CLAUDE.md` — Delegation.
+
 ---
 
 ### Ranking an unranked file
 
 When `$ARGUMENTS` is `rank`: assign a tier to every **unranked open item** in `TODO.md`.
+
+**Rank inline yourself — never dispatch this to a tier agent, however many items there
+are.** A large backlog is the case where delegating is most tempting and most wrong.
 
 1. Read every open item — `- [ ]`, and any `[wip]`/`[verify]` with no tier.
 2. Rank each against the rubric. Use the linked plan for context where one exists.
@@ -76,6 +85,10 @@ When `$ARGUMENTS` is `rank`: assign a tier to every **unranked open item** in `T
 5. Make **ONE Write** of the whole file, not many small edits.
 6. Report a tier histogram (`T0×2 T1×5 T2×3 T3×8 T4×1 T5×0`) and call out anything you
    ranked T4/T5, since those are the expensive calls worth a second opinion.
+
+To sweep every repo, loop `/todo rank` per repo — still inline, still yourself. A subagent
+may be dispatched to *gather* the raw item text (that is a T0 lookup), but the tier
+decision comes back to you.
 
 ---
 
