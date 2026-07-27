@@ -1,0 +1,9 @@
+{
+  "name": "tiered-todo",
+  "description": "Rank every TODO item 0-5 by thinking required, then dispatch it to the cheapest model that can do it — five tier agents (haiku through opus@high), a /next dispatcher that reuses live agents, and the TODO.md marker grammar that carries the rank.",
+  "category": "workflow",
+  "author": {
+    "name": "Will Norris",
+    "url": "https://biohack.net"
+  }
+}
